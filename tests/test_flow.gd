@@ -28,9 +28,27 @@ func _run() -> void:
 	await process_frame
 	_expect(app.current_screen is BattleScreen, "NPC flow can open battle")
 	_expect(app.current_screen.battle.equipped_part(app.current_screen.battle.units[0], "head").id == "cog_sensor", "battle receives field roster")
-	app.current_screen.battle_completed.emit("retreat")
+	# Destroying the enemy leader head stops battle and opens an explicit result.
+	app.current_screen.battle.units[2].parts.head = 0
+	app.current_screen.battle._check_victory()
+	await process_frame
+	_expect(app.current_screen.result_panel.visible, "leader destruction opens result panel")
+	_expect(app.current_screen.pending_result == "win", "enemy leader destruction is a win")
+	app.current_screen.confirm_result()
 	await process_frame
 	_expect(app.current_screen is OverworldScreen, "battle result returns to field")
+	_expect(app.game_data.battles_won == 1, "confirmed victory updates RPG progress")
+	app.show_battle()
+	await process_frame
+	app.current_screen.battle.units[0].parts.head = 0
+	app.current_screen.battle._check_victory()
+	await process_frame
+	_expect(app.current_screen.result_panel.visible, "player leader destruction opens result panel")
+	_expect(app.current_screen.pending_result == "loss", "player leader destruction is a loss")
+	app.current_screen.confirm_result()
+	await process_frame
+	_expect(app.current_screen is OverworldScreen, "confirmed loss also returns to field")
+	_expect(app.game_data.battles_won == 1, "loss does not increase victories")
 	if failures == 0:
 		print("PASS: screen flow tests")
 		quit(0)

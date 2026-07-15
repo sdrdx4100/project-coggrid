@@ -17,6 +17,12 @@ var turn_label: Label
 var ai_pending := false
 var setup_panel: SetupPanel
 var game_data: GameData
+var input_locked := true
+var intro_panel: PanelContainer
+var result_panel: PanelContainer
+var result_title: Label
+var result_detail: Label
+var pending_result := ""
 
 func _ready() -> void:
 	_build_ui()
@@ -24,6 +30,7 @@ func _ready() -> void:
 	battle.log_added.connect(_on_log)
 	battle.battle_finished.connect(_on_battle_finished)
 	battle.setup_demo(game_data.player_loadouts() if game_data != null else [])
+	_show_battle_intro()
 
 func _build_ui() -> void:
 	var background := ColorRect.new()
@@ -99,6 +106,57 @@ func _build_ui() -> void:
 	setup_panel.closed.connect(_refresh)
 	setup_panel.hide()
 	add_child(setup_panel)
+	_build_battle_overlays()
+
+func _build_battle_overlays() -> void:
+	intro_panel = PanelContainer.new()
+	intro_panel.set_anchors_preset(Control.PRESET_CENTER)
+	intro_panel.position = Vector2(-260, -90)
+	intro_panel.custom_minimum_size = Vector2(520, 180)
+	intro_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var intro := VBoxContainer.new()
+	intro.alignment = BoxContainer.ALIGNMENT_CENTER
+	intro_panel.add_child(intro)
+	var intro_title := _label("ROBATTLE START", 38, Color("8de8ff"))
+	intro_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	intro.add_child(intro_title)
+	var objective := _label("相手リーダーの頭部パーツを破壊せよ", 18, Color("eaf0ff"))
+	objective.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	intro.add_child(objective)
+	intro_panel.hide()
+	add_child(intro_panel)
+
+	result_panel = PanelContainer.new()
+	result_panel.set_anchors_preset(Control.PRESET_CENTER)
+	result_panel.position = Vector2(-300, -170)
+	result_panel.custom_minimum_size = Vector2(600, 340)
+	result_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var result := VBoxContainer.new()
+	result.alignment = BoxContainer.ALIGNMENT_CENTER
+	result.add_theme_constant_override("separation", 18)
+	result_panel.add_child(result)
+	result_title = _label("", 48, Color("8fffc1"))
+	result_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result.add_child(result_title)
+	result_detail = _label("", 20, Color("eaf0ff"))
+	result_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result.add_child(result_detail)
+	var return_button := Button.new()
+	return_button.text = "フィールドへ戻る"
+	return_button.pressed.connect(confirm_result)
+	result.add_child(return_button)
+	result_panel.hide()
+	add_child(result_panel)
+
+func _show_battle_intro() -> void:
+	input_locked = true
+	intro_panel.show()
+	get_tree().create_timer(1.0).timeout.connect(func():
+		if not is_instance_valid(self) or battle.phase == "finished": return
+		intro_panel.hide()
+		input_locked = false
+		_refresh()
+	)
 
 func _label(value: String, font_size: int, color: Color) -> Label:
 	var label := Label.new()
@@ -120,7 +178,7 @@ func _refresh() -> void:
 	portrait.show_unit(unit)
 	_rebuild_parts(unit)
 	_rebuild_actions(unit)
-	if unit.team == 1 and battle.phase != "finished" and not ai_pending:
+	if unit.team == 1 and battle.phase != "finished" and not input_locked and not ai_pending:
 		ai_pending = true
 		get_tree().create_timer(0.55).timeout.connect(func():
 			ai_pending = false
@@ -145,7 +203,7 @@ func _rebuild_actions(unit: Dictionary) -> void:
 		var data := battle.action_data(action, unit)
 		var button := Button.new()
 		button.text = "%s  AP %d" % [data.label, data.cost] if action == "move" else "%s  AP %d 成功 %d" % [data.label, data.cost, data.success]
-		button.disabled = unit.team == 1 or battle.phase != "choose" or unit.ap < data.cost or (action != "move" and unit.parts[action] <= 0)
+		button.disabled = input_locked or unit.team == 1 or battle.phase != "choose" or unit.ap < data.cost or (action != "move" and unit.parts[action] <= 0)
 		button.pressed.connect(func(): battle.choose_action(action))
 		action_box.add_child(button)
 	if battle.can_reconfigure(unit.id):
@@ -169,7 +227,7 @@ func _phase_text() -> String:
 
 func _on_cell_clicked(cell: Vector2i) -> void:
 	var unit := battle.current_unit()
-	if unit.is_empty() or unit.team == 1: return
+	if input_locked or unit.is_empty() or unit.team == 1: return
 	if battle.phase == "move":
 		battle.move_current(cell)
 	elif battle.phase == "target":
@@ -180,5 +238,19 @@ func _on_log(text: String) -> void:
 	message.text = "  " + text
 
 func _on_battle_finished(text: String) -> void:
-	_on_log(text + "　フィールドへ戻ります。")
-	get_tree().create_timer(1.2).timeout.connect(func(): battle_completed.emit("win" if battle.winner == 0 else "loss"))
+	input_locked = true
+	intro_panel.hide()
+	pending_result = "win" if battle.winner == 0 else "loss"
+	result_title.text = "YOU WIN" if pending_result == "win" else "YOU LOSE"
+	result_title.add_theme_color_override("font_color", Color("8fffc1") if pending_result == "win" else Color("ff8390"))
+	result_detail.text = "%s\nTURN %d　勝利条件：リーダー頭部の破壊" % [text, battle.round_number]
+	result_panel.show()
+	result_panel.move_to_front()
+	_on_log(text)
+
+func confirm_result() -> void:
+	if pending_result == "": return
+	var result := pending_result
+	pending_result = ""
+	result_panel.hide()
+	battle_completed.emit(result)

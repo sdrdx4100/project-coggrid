@@ -4,7 +4,7 @@ extends RefCounted
 const SAVE_PATH := "user://save.json"
 
 var catalog := PartCatalog.new()
-var inventory := {"cog_sensor":2,"fortress_core":2,"bolt_rifle":2,"prism_cannon":2,"impact_knuckle":2,"needle_claw":2,"walker_legs":2,"hover_base":2}
+var inventory := {"cog_sensor":2,"fortress_core":2,"bolt_rifle":2,"prism_cannon":2,"blast_launcher":2,"impact_knuckle":2,"needle_claw":2,"walker_legs":2,"hover_base":2}
 var roster: Array[Dictionary] = []
 var player_cell := Vector2i(3, 10)
 var battles_won := 0

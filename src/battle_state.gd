@@ -21,7 +21,7 @@ var winner := -1
 var last_attack: Dictionary = {}
 var catalog := PartCatalog.new()
 var team_inventory := {
-	0: {"cog_sensor": 2, "fortress_core": 2, "bolt_rifle": 2, "prism_cannon": 2, "impact_knuckle": 2, "needle_claw": 2, "walker_legs": 2, "hover_base": 2},
+	0: {"cog_sensor": 2, "fortress_core": 2, "bolt_rifle": 2, "prism_cannon": 2, "blast_launcher": 2, "impact_knuckle": 2, "needle_claw": 2, "walker_legs": 2, "hover_base": 2},
 	1: {"rivet_core": 2, "red_rifle": 2, "red_claw": 2, "rivet_legs": 2},
 }
 
@@ -214,7 +214,7 @@ func attack(target_id: int) -> bool:
 	var chance := hit_chance(attacker, target, selected_action)
 	# 成功値 vs 回避値で命中判定。外れれば回避成功（ダメージ0）。
 	if _battle_roll(seed_value, 7, 100) >= chance:
-		last_attack = {"outcome": "evade", "attacker": attacker.id, "target": target.id, "part": "", "damage": 0, "chance": chance}
+		last_attack = {"outcome":"evade","attacker":attacker.id,"target":target.id,"part":"","damage":0,"chance":chance,"action_class":action["class"],"attack_family":action.family}
 		_emit_log("%sの%s！ %sが回避した！" % [attacker.name, action.label, target.name])
 		finish_action()
 		return true
@@ -229,7 +229,7 @@ func attack(target_id: int) -> bool:
 		damage -= active_team_count(target.team)
 	damage = max(1, damage)
 	target.parts[part] = max(0, target.parts[part] - damage)
-	last_attack = {"outcome": "hit", "attacker": attacker.id, "target": target.id, "part": part, "damage": damage, "chance": chance}
+	last_attack = {"outcome":"hit","attacker":attacker.id,"target":target.id,"part":part,"damage":damage,"chance":chance,"action_class":action["class"],"attack_family":action.family}
 	var note := "（防御-%d）" % defense if defense > 0 else ""
 	_emit_log("%sの%s命中！ %sの%sへ%dダメージ%s。" % [attacker.name, action.label, target.name, part_label(part), damage, note])
 	if target.parts[part] == 0:

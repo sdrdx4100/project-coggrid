@@ -7,11 +7,7 @@ var id := ""
 var display_name := ""
 var slot := ""
 var armor := 1
-var action_name := ""
-var ap_cost := 0
-var attack_range := 0
-var power := 0
-var success := 0
+var action: PartAction
 var propulsion := 0
 var evasion_base := 0
 var defense_base := 0
@@ -24,11 +20,7 @@ static func create(values: Dictionary) -> PartData:
 	part.display_name = values.get("name", part.id)
 	part.slot = values.get("slot", "")
 	part.armor = values.get("armor", 1)
-	part.action_name = values.get("action", "")
-	part.ap_cost = values.get("cost", 0)
-	part.attack_range = values.get("range", 0)
-	part.power = values.get("power", 0)
-	part.success = values.get("success", 0)
+	part.action = PartAction.create(values)
 	part.propulsion = values.get("propulsion", 0)
 	part.evasion_base = values.get("evasion", 0)
 	part.defense_base = values.get("defense", 0)
@@ -37,16 +29,12 @@ static func create(values: Dictionary) -> PartData:
 	return part
 
 func action_data() -> Dictionary:
-	return {
-		"label": action_name,
-		"part_name": display_name,
-		"cost": ap_cost,
-		"range": attack_range,
-		"damage": power,
-		"success": success,
-	}
+	var data := action.to_battle_data()
+	data.part_name = display_name
+	return data
 
 func summary() -> String:
 	if slot == "legs":
 		return "装甲%d 推進%d 回避%d 防御%d" % [armor, propulsion, evasion_base, defense_base]
-	return "装甲%d AP%d 威力%d 成功%d 射程%d" % [armor, ap_cost, power, success, attack_range]
+	var family := "" if action.attack_family == PartAction.FAMILY_NONE else "/" + action.family_label()
+	return "%s%s 装甲%d AP%d 威力%d 成功%d 射程%d" % [action.class_label(), family, armor, action.ap_cost, action.power, action.success, action.attack_range]

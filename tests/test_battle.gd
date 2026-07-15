@@ -8,6 +8,7 @@ func _initialize() -> void:
 	_test_defense_values()
 	_test_evasion()
 	_test_part_catalog_and_equipment()
+	_test_action_taxonomy()
 	if failures == 0:
 		print("PASS: battle model tests")
 		quit(0)
@@ -90,3 +91,17 @@ func _test_part_catalog_and_equipment() -> void:
 	_expect(unit.propulsion == 16, "leg part supplies propulsion")
 	battle.choose_action("head")
 	_expect(not battle.equip_part(0, "head", "cog_sensor"), "loadout cannot change after action begins")
+
+func _test_action_taxonomy() -> void:
+	var catalog := PartCatalog.new()
+	var beam := catalog.get_part("prism_cannon").action
+	var missile := catalog.get_part("blast_launcher").action
+	var hammer := catalog.get_part("impact_knuckle").action
+	var sensor := catalog.get_part("cog_sensor").action
+	_expect(beam.action_class == PartAction.CLASS_SHOOT, "beam belongs to shoot class")
+	_expect(beam.attack_family == PartAction.FAMILY_OPTICAL, "beam belongs to optical family")
+	_expect(missile.action_class == PartAction.CLASS_SHOOT, "missile belongs to shoot class")
+	_expect(missile.attack_family == PartAction.FAMILY_GUNPOWDER, "missile belongs to gunpowder family")
+	_expect(hammer.action_class == PartAction.CLASS_STRIKE, "hammer belongs to strike class")
+	_expect(sensor.action_class == PartAction.CLASS_SUPPORT and "scan" in sensor.effect_ids, "support actions can declare future effects")
+	_expect(not sensor.is_attack(), "support is distinct from attack classes")

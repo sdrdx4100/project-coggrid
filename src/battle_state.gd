@@ -25,10 +25,12 @@ var team_inventory := {
 	1: {"rivet_core": 2, "red_rifle": 2, "red_claw": 2, "rivet_legs": 2},
 }
 
-func setup_demo() -> void:
+func setup_demo(player_loadouts: Array[Dictionary] = []) -> void:
+	var blue_a := player_loadouts[0] if player_loadouts.size() > 0 else {"head":"cog_sensor","right":"bolt_rifle","left":"impact_knuckle","legs":"walker_legs"}
+	var blue_b := player_loadouts[1] if player_loadouts.size() > 1 else {"head":"fortress_core","right":"prism_cannon","left":"needle_claw","legs":"walker_legs"}
 	units = [
-		_make_unit(0, "COG-01", 0, Vector2i(2, 6), true, Color("45a7ff"), {"head":"cog_sensor","right":"bolt_rifle","left":"impact_knuckle","legs":"walker_legs"}),
-		_make_unit(1, "BOLT-02", 0, Vector2i(1, 4), false, Color("2d72cc"), {"head":"fortress_core","right":"prism_cannon","left":"needle_claw","legs":"walker_legs"}),
+		_make_unit(0, "COG-01", 0, Vector2i(2, 6), true, Color("45a7ff"), blue_a),
+		_make_unit(1, "BOLT-02", 0, Vector2i(1, 4), false, Color("2d72cc"), blue_b),
 		_make_unit(2, "RIVET-R", 1, Vector2i(6, 2), true, Color("ff5b5b"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}),
 		_make_unit(3, "CLAW-R", 1, Vector2i(7, 4), false, Color("cc3434"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}),
 	]

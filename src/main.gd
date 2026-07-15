@@ -1,4 +1,7 @@
+class_name BattleScreen
 extends Control
+
+signal battle_completed(result: String)
 
 var battle := BattleState.new()
 var board: GridBoard
@@ -13,13 +16,14 @@ var message: Label
 var turn_label: Label
 var ai_pending := false
 var setup_panel: SetupPanel
+var game_data: GameData
 
 func _ready() -> void:
 	_build_ui()
 	battle.changed.connect(_refresh)
 	battle.log_added.connect(_on_log)
-	battle.battle_finished.connect(_on_log)
-	battle.setup_demo()
+	battle.battle_finished.connect(_on_battle_finished)
+	battle.setup_demo(game_data.player_loadouts() if game_data != null else [])
 
 func _build_ui() -> void:
 	var background := ColorRect.new()
@@ -73,6 +77,10 @@ func _build_ui() -> void:
 	phase_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	topbar.add_child(turn_label)
 	topbar.add_child(phase_label)
+	var retreat := Button.new()
+	retreat.text = "フィールドへ戻る"
+	retreat.pressed.connect(func(): battle_completed.emit("retreat"))
+	topbar.add_child(retreat)
 	right.add_child(topbar)
 	board = GridBoard.new()
 	board.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -170,3 +178,7 @@ func _on_cell_clicked(cell: Vector2i) -> void:
 
 func _on_log(text: String) -> void:
 	message.text = "  " + text
+
+func _on_battle_finished(text: String) -> void:
+	_on_log(text + "　フィールドへ戻ります。")
+	get_tree().create_timer(1.2).timeout.connect(func(): battle_completed.emit("win" if battle.winner == 0 else "loss"))

@@ -119,6 +119,7 @@ func _rebuild_parts(unit: Dictionary) -> void:
 		var maximum: int = unit.parts_max[part]
 		var label := _label("%s  %02d/%02d" % [battle.part_label(part), value, maximum], 16, Color("ff8390") if value == 0 else Color("eaf0ff"))
 		parts_box.add_child(label)
+	parts_box.add_child(_label("回避 %02d ／ 防御 %02d" % [battle.evasion_value(unit), battle.defense_value(unit)], 16, Color("ffd98f")))
 
 func _rebuild_actions(unit: Dictionary) -> void:
 	for child in action_box.get_children(): child.queue_free()
@@ -126,7 +127,7 @@ func _rebuild_actions(unit: Dictionary) -> void:
 	for action in ["head", "right", "left", "move"]:
 		var data := battle.action_data(action)
 		var button := Button.new()
-		button.text = "%s  AP %d" % [data.label, data.cost]
+		button.text = "%s  AP %d" % [data.label, data.cost] if action == "move" else "%s  AP %d 成功 %d" % [data.label, data.cost, data.success]
 		button.disabled = unit.team == 1 or battle.phase != "choose" or unit.ap < data.cost or (action != "move" and unit.parts[action] <= 0)
 		button.pressed.connect(func(): battle.choose_action(action))
 		action_box.add_child(button)

@@ -190,11 +190,8 @@ func move_current(cell: Vector2i) -> bool:
 		finish_action()
 	else:
 		phase = "target"
-		var chances := PackedStringArray()
-		for target_id in targetable_units():
-			chances.append("%s %d%%" % [units[target_id].name, hit_chance(unit, units[target_id], selected_action)])
-		var summary := "（命中: %s）" % ", ".join(chances) if not chances.is_empty() else "（射程内に対象なし）"
-		_emit_log("%s：%dマス移動。攻撃対象を選択 %s" % [unit.name, distance, summary])
+		var guidance := "攻撃対象を選択してください。" if not targetable_units().is_empty() else "射程内に対象はいません。"
+		_emit_log("%s：%dマス移動。%s" % [unit.name, distance, guidance])
 		changed.emit()
 	return true
 
@@ -218,7 +215,7 @@ func attack(target_id: int) -> bool:
 	# 成功値 vs 回避値で命中判定。外れれば回避成功（ダメージ0）。
 	if _battle_roll(seed_value, 7, 100) >= chance:
 		last_attack = {"outcome": "evade", "attacker": attacker.id, "target": target.id, "part": "", "damage": 0, "chance": chance}
-		_emit_log("%sの%s！ %sが回避成功（命中%d%%）。" % [attacker.name, action.label, target.name, chance])
+		_emit_log("%sの%s！ %sが回避した！" % [attacker.name, action.label, target.name])
 		finish_action()
 		return true
 	var candidates: Array[String] = []

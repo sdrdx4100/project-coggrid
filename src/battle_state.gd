@@ -18,6 +18,7 @@ var action_index := 0
 var selected_action := ""
 var phase := "idle" # choose, move, target, finished
 var winner := -1
+var last_attack: Dictionary = {}
 
 func setup_demo() -> void:
 	units = [
@@ -74,11 +75,33 @@ func current_unit() -> Dictionary:
 
 func action_data(action: String) -> Dictionary:
 	match action:
-		"head": return {"label": "頭部", "cost": 12, "range": 2, "damage": 12}
-		"right": return {"label": "右腕", "cost": 8, "range": 3, "damage": 10}
-		"left": return {"label": "左腕", "cost": 6, "range": 1, "damage": 14}
-		"move": return {"label": "移動のみ", "cost": 0, "range": 0, "damage": 0}
+		"head": return {"label": "頭部", "cost": 12, "range": 2, "damage": 12, "success": 9}
+		"right": return {"label": "右腕", "cost": 8, "range": 3, "damage": 10, "success": 7}
+		"left": return {"label": "左腕", "cost": 6, "range": 1, "damage": 14, "success": 5}
+		"move": return {"label": "移動のみ", "cost": 0, "range": 0, "damage": 0, "success": 0}
 	return {}
+
+# 脚部の残り装甲と推進値から算出する回避値。脚部破壊時は0（＝ほぼ確実に被弾）。
+func evasion_value(unit: Dictionary) -> int:
+	if unit.is_empty() or unit.parts.legs <= 0: return 0
+	var ratio := float(unit.parts.legs) / unit.parts_max.legs
+	return int((4.0 + unit.propulsion / 3.0) * ratio)
+
+# 脚部の残り装甲から算出する防御値。命中したダメージをこの分だけ軽減する。
+func defense_value(unit: Dictionary) -> int:
+	if unit.is_empty() or unit.parts.legs <= 0: return 0
+	var ratio := float(unit.parts.legs) / unit.parts_max.legs
+	return int(4.0 * ratio)
+
+# 攻撃側の成功値と対象の回避値から命中率(%)を求める。
+func hit_chance(attacker: Dictionary, target: Dictionary, action: String) -> int:
+	var success: int = action_data(action).success + int(attacker.propulsion / 4)
+	return clampi(60 + (success - evasion_value(target)) * 5, 10, 95)
+
+# 戦闘状態から決定論的に得る擬似乱数。テスト再現性のため乱数生成器を使わない。
+func _battle_roll(seed_value: int, salt: int, modulo: int) -> int:
+	var mixed: int = seed_value * 1103515245 + salt * 12345 + 1013904223
+	return abs(mixed) % modulo
 
 func choose_action(action: String) -> bool:
 	if phase != "choose": return false
@@ -116,7 +139,11 @@ func move_current(cell: Vector2i) -> bool:
 		finish_action()
 	else:
 		phase = "target"
-		_emit_log("%s：%dマス移動。攻撃対象を選択してください。" % [unit.name, distance])
+		var chances := PackedStringArray()
+		for target_id in targetable_units():
+			chances.append("%s %d%%" % [units[target_id].name, hit_chance(unit, units[target_id], selected_action)])
+		var summary := "（命中: %s）" % ", ".join(chances) if not chances.is_empty() else "（射程内に対象なし）"
+		_emit_log("%s：%dマス移動。攻撃対象を選択 %s" % [unit.name, distance, summary])
 		changed.emit()
 	return true
 
@@ -134,16 +161,29 @@ func attack(target_id: int) -> bool:
 	if not target_id in targetable_units(): return false
 	var attacker := current_unit()
 	var target := units[target_id]
+	var action := action_data(selected_action)
+	var seed_value: int = round_number * 1000 + attacker.id * 100 + target.id * 10 + attacker.cell.x + attacker.cell.y
+	var chance := hit_chance(attacker, target, selected_action)
+	# 成功値 vs 回避値で命中判定。外れれば回避成功（ダメージ0）。
+	if _battle_roll(seed_value, 7, 100) >= chance:
+		last_attack = {"outcome": "evade", "attacker": attacker.id, "target": target.id, "part": "", "damage": 0, "chance": chance}
+		_emit_log("%sの%s！ %sが回避成功（命中%d%%）。" % [attacker.name, action.label, target.name, chance])
+		finish_action()
+		return true
 	var candidates: Array[String] = []
 	for part in ["head", "right", "left", "legs"]:
 		if target.parts[part] > 0: candidates.append(part)
-	var seed_value: int = round_number * 1000 + attacker.id * 100 + target.id * 10 + attacker.cell.x + attacker.cell.y
-	var part: String = candidates[seed_value % candidates.size()]
-	var damage: int = action_data(selected_action).damage
+	var part: String = candidates[_battle_roll(seed_value, 3, candidates.size())]
+	# 命中したダメージを防御値で軽減。リーダー機はさらに残存機体数だけ軽減。
+	var defense := defense_value(target)
+	var damage: int = action.damage - defense
 	if target.leader:
-		damage = max(1, damage - active_team_count(target.team))
+		damage -= active_team_count(target.team)
+	damage = max(1, damage)
 	target.parts[part] = max(0, target.parts[part] - damage)
-	_emit_log("%sの%s！ %sの%sへ%dダメージ。" % [attacker.name, action_data(selected_action).label, target.name, part_label(part), damage])
+	last_attack = {"outcome": "hit", "attacker": attacker.id, "target": target.id, "part": part, "damage": damage, "chance": chance}
+	var note := "（防御-%d）" % defense if defense > 0 else ""
+	_emit_log("%sの%s命中！ %sの%sへ%dダメージ%s。" % [attacker.name, action.label, target.name, part_label(part), damage, note])
 	if target.parts[part] == 0:
 		_emit_log("%sの%sパーツが破壊されました。" % [target.name, part_label(part)])
 		if part == "head":

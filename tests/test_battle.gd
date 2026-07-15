@@ -5,6 +5,8 @@ var failures := 0
 func _initialize() -> void:
 	_test_action_flow()
 	_test_generator_capture()
+	_test_defense_values()
+	_test_evasion()
 	if failures == 0:
 		print("PASS: battle model tests")
 		quit(0)
@@ -31,7 +33,37 @@ func _test_action_flow() -> void:
 	_expect(battle.attack(2), "enemy in range can be attacked")
 	var hp_after: int = battle.units[2].parts.head + battle.units[2].parts.right + battle.units[2].parts.left + battle.units[2].parts.legs
 	_expect(hp_after < hp_before, "attack damages one part")
+	_expect(battle.last_attack.outcome == "hit", "attack lands when hit roll beats evasion")
+	_expect(battle.last_attack.part == "right", "damaged part is deterministic")
+	_expect(battle.last_attack.damage == 4, "defense and leader guard reduce damage (10 - 4 - 2)")
 	_expect(battle.units[0].mf == 1, "unused AP becomes MF")
+
+func _test_defense_values() -> void:
+	var battle := BattleState.new()
+	battle.setup_demo()
+	var attacker := battle.units[0] # COG-01, propulsion 13
+	var target := battle.units[2] # RIVET-R, propulsion 12, full legs
+	_expect(battle.evasion_value(target) == 8, "full legs give evasion")
+	_expect(battle.defense_value(target) == 4, "full legs give defense")
+	_expect(battle.hit_chance(attacker, target, "right") == 70, "hit chance combines success and evasion")
+	target.parts.legs = 0
+	_expect(battle.evasion_value(target) == 0, "broken legs remove evasion")
+	_expect(battle.defense_value(target) == 0, "broken legs remove defense")
+	_expect(battle.hit_chance(attacker, target, "right") == 95, "immobile targets are almost always hit")
+
+func _test_evasion() -> void:
+	var battle := BattleState.new()
+	battle.setup_demo()
+	battle.units[0].cell = Vector2i(5, 3)
+	battle.units[2].cell = Vector2i(6, 3)
+	_expect(battle.choose_action("left"), "left arm can be selected")
+	_expect(battle.move_current(Vector2i(5, 3)), "unit can hold position")
+	_expect(battle.phase == "target", "attack target follows movement")
+	var hp_before: int = battle.units[2].parts.head + battle.units[2].parts.right + battle.units[2].parts.left + battle.units[2].parts.legs
+	_expect(battle.attack(2), "attack resolves even on a miss")
+	var hp_after: int = battle.units[2].parts.head + battle.units[2].parts.right + battle.units[2].parts.left + battle.units[2].parts.legs
+	_expect(battle.last_attack.outcome == "evade", "high roll versus evasion is dodged")
+	_expect(hp_after == hp_before, "evaded attack deals no damage")
 
 func _test_generator_capture() -> void:
 	var battle := BattleState.new()

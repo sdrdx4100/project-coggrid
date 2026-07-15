@@ -12,6 +12,7 @@ var action_box: VBoxContainer
 var message: Label
 var turn_label: Label
 var ai_pending := false
+var setup_panel: SetupPanel
 
 func _ready() -> void:
 	_build_ui()
@@ -84,6 +85,13 @@ func _build_ui() -> void:
 	right.add_child(message)
 	board.bind(battle)
 
+	setup_panel = SetupPanel.new()
+	setup_panel.set_anchors_preset(Control.PRESET_CENTER)
+	setup_panel.position = Vector2(-310, -240)
+	setup_panel.closed.connect(_refresh)
+	setup_panel.hide()
+	add_child(setup_panel)
+
 func _label(value: String, font_size: int, color: Color) -> Label:
 	var label := Label.new()
 	label.text = value
@@ -117,7 +125,8 @@ func _rebuild_parts(unit: Dictionary) -> void:
 	for part in ["head", "right", "left", "legs"]:
 		var value: int = unit.parts[part]
 		var maximum: int = unit.parts_max[part]
-		var label := _label("%s  %02d/%02d" % [battle.part_label(part), value, maximum], 16, Color("ff8390") if value == 0 else Color("eaf0ff"))
+		var equipped := battle.equipped_part(unit, part)
+		var label := _label("%s %s  %02d/%02d" % [battle.part_label(part), equipped.display_name, value, maximum], 14, Color("ff8390") if value == 0 else Color("eaf0ff"))
 		parts_box.add_child(label)
 	parts_box.add_child(_label("回避 %02d ／ 防御 %02d" % [battle.evasion_value(unit), battle.defense_value(unit)], 16, Color("ffd98f")))
 
@@ -125,12 +134,17 @@ func _rebuild_actions(unit: Dictionary) -> void:
 	for child in action_box.get_children(): child.queue_free()
 	action_box.add_child(_label("ACTION", 16, Color("8fffc1")))
 	for action in ["head", "right", "left", "move"]:
-		var data := battle.action_data(action)
+		var data := battle.action_data(action, unit)
 		var button := Button.new()
 		button.text = "%s  AP %d" % [data.label, data.cost] if action == "move" else "%s  AP %d 成功 %d" % [data.label, data.cost, data.success]
 		button.disabled = unit.team == 1 or battle.phase != "choose" or unit.ap < data.cost or (action != "move" and unit.parts[action] <= 0)
 		button.pressed.connect(func(): battle.choose_action(action))
 		action_box.add_child(button)
+	if battle.can_reconfigure(unit.id):
+		var setup := Button.new()
+		setup.text = "セッティング"
+		setup.pressed.connect(func(): setup_panel.open_for(battle, unit.id))
+		action_box.add_child(setup)
 	if battle.phase in ["move", "target"] and unit.team == 0:
 		var skip := Button.new()
 		skip.text = "行動終了"

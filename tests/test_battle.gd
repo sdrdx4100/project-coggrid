@@ -7,6 +7,7 @@ func _initialize() -> void:
 	_test_generator_capture()
 	_test_defense_values()
 	_test_evasion()
+	_test_part_catalog_and_equipment()
 	if failures == 0:
 		print("PASS: battle model tests")
 		quit(0)
@@ -72,3 +73,20 @@ func _test_generator_capture() -> void:
 	battle._start_round()
 	_expect(battle.units[0].ap == 12, "captured friendly generator reduces team AP by 25 percent")
 	_expect(battle.units[2].ap == 22, "capturing unit gets generator bonus without penalizing its own team")
+
+func _test_part_catalog_and_equipment() -> void:
+	var battle := BattleState.new()
+	battle.setup_demo()
+	var unit := battle.units[0]
+	_expect(battle.catalog.get_part("cog_sensor").slot == "head", "catalog stores independent part data")
+	_expect(battle.available_parts(0, "head").size() == 2, "inventory exposes owned head parts")
+	_expect(battle.equipped_part(unit, "head").id == "cog_sensor", "unit has a four-slot loadout")
+	_expect(battle.equip_part(0, "head", "fortress_core"), "owned matching part can be equipped")
+	_expect(battle.equipped_part(unit, "head").id == "fortress_core", "equipment slot changes")
+	_expect(unit.parts.head == 52 and unit.parts_max.head == 52, "equipping restores the new part armor")
+	_expect(battle.action_data("head", unit).label == "ヘビープレス", "equipped part supplies its action")
+	_expect(not battle.equip_part(0, "right", "hover_base"), "part cannot enter the wrong slot")
+	_expect(battle.equip_part(0, "legs", "hover_base"), "owned legs can be equipped")
+	_expect(unit.propulsion == 16, "leg part supplies propulsion")
+	battle.choose_action("head")
+	_expect(not battle.equip_part(0, "head", "cog_sensor"), "loadout cannot change after action begins")

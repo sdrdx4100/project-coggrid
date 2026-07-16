@@ -10,6 +10,7 @@ func _initialize() -> void:
 	_test_part_catalog_and_equipment()
 	_test_action_taxonomy()
 	_test_ai_profiles()
+	_test_unit_id_index()
 	if failures == 0:
 		print("PASS: battle model tests")
 		quit(0)
@@ -22,9 +23,15 @@ func _expect(condition: bool, message: String) -> void:
 		failures += 1
 		push_error("FAIL: " + message)
 
+func _setup_standard_battle(battle: BattleState) -> void:
+	battle.setup_demo([
+		{"head":"cog_sensor","right":"bolt_rifle","left":"impact_knuckle","legs":"walker_legs"},
+		{"head":"fortress_core","right":"prism_cannon","left":"needle_claw","legs":"walker_legs"},
+	])
+
 func _test_action_flow() -> void:
 	var battle := BattleState.new()
-	battle.setup_demo()
+	_setup_standard_battle(battle)
 	_expect(battle.round_number == 1, "battle starts on turn 1")
 	_expect(battle.current_unit().name == "COG-01", "highest propulsion unit acts first")
 	_expect(battle.current_unit().ap == 16, "AP uses base plus propulsion")
@@ -43,7 +50,7 @@ func _test_action_flow() -> void:
 
 func _test_defense_values() -> void:
 	var battle := BattleState.new()
-	battle.setup_demo()
+	_setup_standard_battle(battle)
 	var attacker := battle.units[0] # COG-01, propulsion 13
 	var target := battle.units[2] # RIVET-R, propulsion 12, full legs
 	_expect(battle.evasion_value(target) == 8, "full legs give evasion")
@@ -56,7 +63,7 @@ func _test_defense_values() -> void:
 
 func _test_evasion() -> void:
 	var battle := BattleState.new()
-	battle.setup_demo()
+	_setup_standard_battle(battle)
 	battle.units[0].cell = Vector2i(5, 3)
 	battle.units[2].cell = Vector2i(6, 3)
 	_expect(battle.choose_action("left"), "left arm can be selected")
@@ -70,7 +77,7 @@ func _test_evasion() -> void:
 
 func _test_generator_capture() -> void:
 	var battle := BattleState.new()
-	battle.setup_demo()
+	_setup_standard_battle(battle)
 	battle.units[2].cell = Vector2i(1, 1)
 	battle._start_round()
 	_expect(battle.units[0].ap == 12, "captured friendly generator reduces team AP by 25 percent")
@@ -78,7 +85,7 @@ func _test_generator_capture() -> void:
 
 func _test_part_catalog_and_equipment() -> void:
 	var battle := BattleState.new()
-	battle.setup_demo()
+	_setup_standard_battle(battle)
 	var unit := battle.units[0]
 	_expect(battle.catalog.get_part("cog_sensor").slot == "head", "catalog stores independent part data")
 	_expect(battle.available_parts(0, "head").size() == 2, "inventory exposes owned head parts")
@@ -116,7 +123,7 @@ func _test_ai_profiles() -> void:
 	_expect(boss.choice_pool == 1, "boss AI always takes its highest-scored choice")
 
 	var battle := BattleState.new()
-	battle.setup_demo()
+	_setup_standard_battle(battle)
 	_expect(battle.units[2].ai_profile == AiProfile.BOSS, "enemy leader uses the boss profile")
 	_expect(battle.units[3].ai_profile == AiProfile.ELITE, "enemy partner uses the elite profile")
 
@@ -129,3 +136,20 @@ func _test_ai_profiles() -> void:
 	_expect(not first.is_empty(), "AI produces a legal tactical decision")
 	_expect(first == second, "AI choice is deterministic for the same battle state")
 	_expect(first.target_id == battle.units[0].id, "boss profile prioritizes the enemy leader")
+
+func _test_unit_id_index() -> void:
+	var battle := BattleState.new()
+	_setup_standard_battle(battle)
+	var replacement_ids := [10, 20, 30, 40]
+	for index in battle.units.size(): battle.units[index].id = replacement_ids[index]
+	battle.units.reverse()
+	battle._rebuild_unit_index()
+	battle.unit_by_id(10).propulsion = 20
+	battle.round_number = 0
+	battle._start_round()
+	_expect(battle.current_unit().id == 10, "turn order resolves non-contiguous ids after unit reordering")
+	_expect(battle.can_reconfigure(10), "configuration resolves a unit by id rather than array position")
+	_expect(battle.equip_part(10, "head", "fortress_core"), "equipment changes resolve a reordered unit by id")
+	_expect(battle.choose_action("right"), "reordered unit can choose an action")
+	_expect(battle.move_current(Vector2i(5, 2)), "reordered unit can move")
+	_expect(battle.attack(30), "target lookup resolves a non-contiguous id")

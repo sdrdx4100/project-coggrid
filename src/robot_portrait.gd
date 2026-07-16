@@ -8,37 +8,11 @@ func show_unit(value: Dictionary) -> void:
 	queue_redraw()
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color("132e59"), true)
-	for i in 8:
-		draw_line(Vector2(0, size.y * (i + 1) / 9.0), Vector2(size.x, size.y * (i + 1) / 9.0), Color(0.2, 0.55, 0.8, 0.12), 1)
+	draw_rect(Rect2(Vector2.ZERO, size), Color("09162d"), true)
+	for i in 10:
+		draw_line(Vector2(0, size.y * (i + 1) / 11.0), Vector2(size.x, size.y * (i + 1) / 11.0), Color(0.22, 0.68, 0.9, 0.07), 1)
 	if unit.is_empty(): return
-	var center := Vector2(size.x * 0.5, size.y * 0.58)
-	var s: float = min(size.x, size.y) / 230.0
-	var head: PartData = unit.equipment.head
-	var right: PartData = unit.equipment.right
-	var left: PartData = unit.equipment.left
-	var legs: PartData = unit.equipment.legs
-	var c: Color = head.color
-	var dark := c.darkened(0.56)
-	draw_circle(center + Vector2(0, 78)*s, 55*s, Color(0, 0, 0, 0.32))
-	# Legs
-	if legs.visual_style == "hover":
-		draw_colored_polygon(PackedVector2Array([center+Vector2(-62,30)*s,center+Vector2(62,30)*s,center+Vector2(44,72)*s,center+Vector2(-44,72)*s]), legs.color)
-		draw_arc(center+Vector2(0,70)*s, 36*s, 0, PI, 24, Color("d9fffb"), 6*s)
-	else:
-		draw_colored_polygon(PackedVector2Array([center+Vector2(-42,25)*s,center+Vector2(-8,25)*s,center+Vector2(-18,90)*s,center+Vector2(-52,90)*s]), legs.color.darkened(0.35))
-		draw_colored_polygon(PackedVector2Array([center+Vector2(8,25)*s,center+Vector2(42,25)*s,center+Vector2(52,90)*s,center+Vector2(18,90)*s]), legs.color.darkened(0.35))
-	# Head part includes torso.
-	draw_colored_polygon(PackedVector2Array([center+Vector2(-52,-46)*s,center+Vector2(52,-46)*s,center+Vector2(40,35)*s,center+Vector2(-40,35)*s]), c)
-	draw_circle(center+Vector2(0,-72)*s, 40*s, c.lightened(0.12))
-	draw_colored_polygon(PackedVector2Array([center+Vector2(-15,-102)*s,center+Vector2(-4,-145)*s,center+Vector2(4,-102)*s]), dark)
-	draw_colored_polygon(PackedVector2Array([center+Vector2(15,-102)*s,center+Vector2(28,-137)*s,center+Vector2(26,-94)*s]), dark)
-	draw_circle(center+Vector2(-14,-76)*s, 7*s, Color("e9ffff"))
-	draw_circle(center+Vector2(14,-76)*s, 7*s, Color("e9ffff"))
-	# Arms
-	draw_rect(Rect2(center+Vector2(-85,-35)*s, Vector2(27,82)*s), left.color.darkened(0.35), true)
-	draw_circle(center+Vector2(-72,50)*s, 18*s, left.color.lightened(0.08))
-	draw_rect(Rect2(center+Vector2(58,-35)*s, Vector2(27,82)*s), right.color.darkened(0.35), true)
-	if right.visual_style == "cannon":
-		draw_rect(Rect2(center+Vector2(65,-60)*s, Vector2(14,55)*s), right.color.lightened(0.12), true)
-	draw_circle(center+Vector2(72,50)*s, 18*s, right.color.lightened(0.08))
+	var center := Vector2(size.x * 0.5, size.y * 0.57)
+	var scale: float = min(size.x, size.y) / 105.0
+	RobotRenderer.draw_robot(self, center, scale, unit)
+	draw_string(ThemeDB.fallback_font, Vector2(18, size.y - 15), "PARTS-LINK // %s" % unit.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("5b91b8"))

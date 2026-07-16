@@ -1,4 +1,7 @@
+class_name BattleScreen
 extends Control
+
+signal battle_completed(result: String)
 
 var battle := BattleState.new()
 var board: GridBoard
@@ -12,13 +15,22 @@ var action_box: VBoxContainer
 var message: Label
 var turn_label: Label
 var ai_pending := false
+var setup_panel: SetupPanel
+var game_data: GameData
+var input_locked := true
+var intro_panel: PanelContainer
+var result_panel: PanelContainer
+var result_title: Label
+var result_detail: Label
+var pending_result := ""
 
 func _ready() -> void:
 	_build_ui()
 	battle.changed.connect(_refresh)
 	battle.log_added.connect(_on_log)
-	battle.battle_finished.connect(_on_log)
-	battle.setup_demo()
+	battle.battle_finished.connect(_on_battle_finished)
+	battle.setup_demo(game_data.player_battle_members() if game_data != null else [])
+	_show_battle_intro()
 
 func _build_ui() -> void:
 	var background := ColorRect.new()
@@ -72,6 +84,10 @@ func _build_ui() -> void:
 	phase_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	topbar.add_child(turn_label)
 	topbar.add_child(phase_label)
+	var retreat := Button.new()
+	retreat.text = "フィールドへ戻る"
+	retreat.pressed.connect(func(): battle_completed.emit("retreat"))
+	topbar.add_child(retreat)
 	right.add_child(topbar)
 	board = GridBoard.new()
 	board.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -83,6 +99,64 @@ func _build_ui() -> void:
 	message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	right.add_child(message)
 	board.bind(battle)
+
+	setup_panel = SetupPanel.new()
+	setup_panel.set_anchors_preset(Control.PRESET_CENTER)
+	setup_panel.position = Vector2(-310, -240)
+	setup_panel.closed.connect(_refresh)
+	setup_panel.hide()
+	add_child(setup_panel)
+	_build_battle_overlays()
+
+func _build_battle_overlays() -> void:
+	intro_panel = PanelContainer.new()
+	intro_panel.set_anchors_preset(Control.PRESET_CENTER)
+	intro_panel.position = Vector2(-260, -90)
+	intro_panel.custom_minimum_size = Vector2(520, 180)
+	intro_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var intro := VBoxContainer.new()
+	intro.alignment = BoxContainer.ALIGNMENT_CENTER
+	intro_panel.add_child(intro)
+	var intro_title := _label("ROBATTLE START", 38, Color("8de8ff"))
+	intro_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	intro.add_child(intro_title)
+	var objective := _label("相手リーダーの頭部パーツを破壊せよ", 18, Color("eaf0ff"))
+	objective.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	intro.add_child(objective)
+	intro_panel.hide()
+	add_child(intro_panel)
+
+	result_panel = PanelContainer.new()
+	result_panel.set_anchors_preset(Control.PRESET_CENTER)
+	result_panel.position = Vector2(-300, -170)
+	result_panel.custom_minimum_size = Vector2(600, 340)
+	result_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var result := VBoxContainer.new()
+	result.alignment = BoxContainer.ALIGNMENT_CENTER
+	result.add_theme_constant_override("separation", 18)
+	result_panel.add_child(result)
+	result_title = _label("", 48, Color("8fffc1"))
+	result_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result.add_child(result_title)
+	result_detail = _label("", 20, Color("eaf0ff"))
+	result_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result.add_child(result_detail)
+	var return_button := Button.new()
+	return_button.text = "フィールドへ戻る"
+	return_button.pressed.connect(confirm_result)
+	result.add_child(return_button)
+	result_panel.hide()
+	add_child(result_panel)
+
+func _show_battle_intro() -> void:
+	input_locked = true
+	intro_panel.show()
+	get_tree().create_timer(1.0).timeout.connect(func():
+		if not is_instance_valid(self) or battle.phase == "finished": return
+		intro_panel.hide()
+		input_locked = false
+		_refresh()
+	)
 
 func _label(value: String, font_size: int, color: Color) -> Label:
 	var label := Label.new()
@@ -98,13 +172,13 @@ func _refresh() -> void:
 	turn_label.text = " TURN %02d " % battle.round_number
 	phase_label.text = _phase_text()
 	if unit.is_empty(): return
-	unit_name.text = ("LEADER  " if unit.leader else "MEMBER  ") + unit.name
+	unit_name.text = ("LEADER  " if unit.leader else "MEMBER  ") + unit.name + "  Lv.%d" % unit.level
 	ap_label.text = "AP  %02d / %02d pt" % [unit.ap, unit.max_ap]
 	mf_label.text = "MF  %03d pt" % unit.mf
 	portrait.show_unit(unit)
 	_rebuild_parts(unit)
 	_rebuild_actions(unit)
-	if unit.team == 1 and battle.phase != "finished" and not ai_pending:
+	if unit.team == 1 and battle.phase != "finished" and not input_locked and not ai_pending:
 		ai_pending = true
 		get_tree().create_timer(0.55).timeout.connect(func():
 			ai_pending = false
@@ -117,20 +191,25 @@ func _rebuild_parts(unit: Dictionary) -> void:
 	for part in ["head", "right", "left", "legs"]:
 		var value: int = unit.parts[part]
 		var maximum: int = unit.parts_max[part]
-		var label := _label("%s  %02d/%02d" % [battle.part_label(part), value, maximum], 16, Color("ff8390") if value == 0 else Color("eaf0ff"))
+		var equipped := battle.equipped_part(unit, part)
+		var label := _label("%s %s  %02d/%02d" % [battle.part_label(part), equipped.display_name, value, maximum], 14, Color("ff8390") if value == 0 else Color("eaf0ff"))
 		parts_box.add_child(label)
-	parts_box.add_child(_label("回避 %02d ／ 防御 %02d" % [battle.evasion_value(unit), battle.defense_value(unit)], 16, Color("ffd98f")))
 
 func _rebuild_actions(unit: Dictionary) -> void:
 	for child in action_box.get_children(): child.queue_free()
 	action_box.add_child(_label("ACTION", 16, Color("8fffc1")))
 	for action in ["head", "right", "left", "move"]:
-		var data := battle.action_data(action)
+		var data := battle.action_data(action, unit)
 		var button := Button.new()
-		button.text = "%s  AP %d" % [data.label, data.cost] if action == "move" else "%s  AP %d 成功 %d" % [data.label, data.cost, data.success]
-		button.disabled = unit.team == 1 or battle.phase != "choose" or unit.ap < data.cost or (action != "move" and unit.parts[action] <= 0)
+		button.text = "%s  AP %d" % [data.label, data.cost]
+		button.disabled = input_locked or unit.team == 1 or battle.phase != "choose" or unit.ap < data.cost or (action != "move" and unit.parts[action] <= 0)
 		button.pressed.connect(func(): battle.choose_action(action))
 		action_box.add_child(button)
+	if battle.can_reconfigure(unit.id):
+		var setup := Button.new()
+		setup.text = "セッティング"
+		setup.pressed.connect(func(): setup_panel.open_for(battle, unit.id))
+		action_box.add_child(setup)
 	if battle.phase in ["move", "target"] and unit.team == 0:
 		var skip := Button.new()
 		skip.text = "行動終了"
@@ -147,7 +226,7 @@ func _phase_text() -> String:
 
 func _on_cell_clicked(cell: Vector2i) -> void:
 	var unit := battle.current_unit()
-	if unit.is_empty() or unit.team == 1: return
+	if input_locked or unit.is_empty() or unit.team == 1: return
 	if battle.phase == "move":
 		battle.move_current(cell)
 	elif battle.phase == "target":
@@ -156,3 +235,21 @@ func _on_cell_clicked(cell: Vector2i) -> void:
 
 func _on_log(text: String) -> void:
 	message.text = "  " + text
+
+func _on_battle_finished(text: String) -> void:
+	input_locked = true
+	intro_panel.hide()
+	pending_result = "win" if battle.winner == 0 else "loss"
+	result_title.text = "YOU WIN" if pending_result == "win" else "YOU LOSE"
+	result_title.add_theme_color_override("font_color", Color("8fffc1") if pending_result == "win" else Color("ff8390"))
+	result_detail.text = "%s\nTURN %d　勝利条件：リーダー頭部の破壊\nEXP +%d" % [text, battle.round_number, MedalProgression.battle_experience(pending_result)]
+	result_panel.show()
+	result_panel.move_to_front()
+	_on_log(text)
+
+func confirm_result() -> void:
+	if pending_result == "": return
+	var result := pending_result
+	pending_result = ""
+	result_panel.hide()
+	battle_completed.emit(result)

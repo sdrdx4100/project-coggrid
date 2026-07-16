@@ -7,6 +7,9 @@ func _initialize() -> void:
 	_test_generator_capture()
 	_test_defense_values()
 	_test_evasion()
+	_test_part_catalog_and_equipment()
+	_test_action_taxonomy()
+	_test_ai_profiles()
 	if failures == 0:
 		print("PASS: battle model tests")
 		quit(0)
@@ -72,3 +75,57 @@ func _test_generator_capture() -> void:
 	battle._start_round()
 	_expect(battle.units[0].ap == 12, "captured friendly generator reduces team AP by 25 percent")
 	_expect(battle.units[2].ap == 22, "capturing unit gets generator bonus without penalizing its own team")
+
+func _test_part_catalog_and_equipment() -> void:
+	var battle := BattleState.new()
+	battle.setup_demo()
+	var unit := battle.units[0]
+	_expect(battle.catalog.get_part("cog_sensor").slot == "head", "catalog stores independent part data")
+	_expect(battle.available_parts(0, "head").size() == 2, "inventory exposes owned head parts")
+	_expect(battle.equipped_part(unit, "head").id == "cog_sensor", "unit has a four-slot loadout")
+	_expect(battle.equip_part(0, "head", "fortress_core"), "owned matching part can be equipped")
+	_expect(battle.equipped_part(unit, "head").id == "fortress_core", "equipment slot changes")
+	_expect(unit.parts.head == 52 and unit.parts_max.head == 52, "equipping restores the new part armor")
+	_expect(battle.action_data("head", unit).label == "ヘビープレス", "equipped part supplies its action")
+	_expect(not battle.equip_part(0, "right", "hover_base"), "part cannot enter the wrong slot")
+	_expect(battle.equip_part(0, "legs", "hover_base"), "owned legs can be equipped")
+	_expect(unit.propulsion == 16, "leg part supplies propulsion")
+	battle.choose_action("head")
+	_expect(not battle.equip_part(0, "head", "cog_sensor"), "loadout cannot change after action begins")
+
+func _test_action_taxonomy() -> void:
+	var catalog := PartCatalog.new()
+	var beam := catalog.get_part("prism_cannon").action
+	var missile := catalog.get_part("blast_launcher").action
+	var hammer := catalog.get_part("impact_knuckle").action
+	var sensor := catalog.get_part("cog_sensor").action
+	_expect(beam.action_class == PartAction.CLASS_SHOOT, "beam belongs to shoot class")
+	_expect(beam.attack_family == PartAction.FAMILY_OPTICAL, "beam belongs to optical family")
+	_expect(missile.action_class == PartAction.CLASS_SHOOT, "missile belongs to shoot class")
+	_expect(missile.attack_family == PartAction.FAMILY_GUNPOWDER, "missile belongs to gunpowder family")
+	_expect(hammer.action_class == PartAction.CLASS_STRIKE, "hammer belongs to strike class")
+	_expect(sensor.action_class == PartAction.CLASS_SUPPORT and "scan" in sensor.effect_ids, "support actions can declare future effects")
+	_expect(not sensor.is_attack(), "support is distinct from attack classes")
+
+func _test_ai_profiles() -> void:
+	var general := AiProfile.create(AiProfile.GENERAL)
+	var elite := AiProfile.create(AiProfile.ELITE)
+	var boss := AiProfile.create(AiProfile.BOSS)
+	_expect(general.choice_pool == 3, "general AI varies among its top three choices")
+	_expect(elite.choice_pool == 2, "elite AI varies among its top two choices")
+	_expect(boss.choice_pool == 1, "boss AI always takes its highest-scored choice")
+
+	var battle := BattleState.new()
+	battle.setup_demo()
+	_expect(battle.units[2].ai_profile == AiProfile.BOSS, "enemy leader uses the boss profile")
+	_expect(battle.units[3].ai_profile == AiProfile.ELITE, "enemy partner uses the elite profile")
+
+	var actor: Dictionary = battle.units[2]
+	actor.cell = Vector2i(4, 4)
+	battle.units[0].cell = Vector2i(3, 4)
+	battle.units[1].cell = Vector2i(5, 4)
+	var first: Dictionary = BattleAi.new().choose_action(battle, actor)
+	var second: Dictionary = BattleAi.new().choose_action(battle, actor)
+	_expect(not first.is_empty(), "AI produces a legal tactical decision")
+	_expect(first == second, "AI choice is deterministic for the same battle state")
+	_expect(first.target_id == battle.units[0].id, "boss profile prioritizes the enemy leader")

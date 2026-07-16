@@ -19,24 +19,89 @@ var selected_action := ""
 var phase := "idle" # choose, move, target, finished
 var winner := -1
 var last_attack: Dictionary = {}
+var catalog := PartCatalog.new()
+var ai_controller := BattleAi.new()
+var team_inventory := {
+	0: {"cog_sensor": 2, "fortress_core": 2, "bolt_rifle": 2, "prism_cannon": 2, "blast_launcher": 2, "impact_knuckle": 2, "needle_claw": 2, "walker_legs": 2, "hover_base": 2},
+	1: {"rivet_core": 2, "red_rifle": 2, "red_claw": 2, "rivet_legs": 2},
+}
 
-func setup_demo() -> void:
+func setup_demo(player_members: Array[Dictionary] = []) -> void:
+	var blue_a := _player_member(player_members, 0, {"head":"cog_sensor","right":"bolt_rifle","left":"impact_knuckle","legs":"walker_legs"})
+	var blue_b := _player_member(player_members, 1, {"head":"fortress_core","right":"prism_cannon","left":"needle_claw","legs":"walker_legs"})
 	units = [
-		_make_unit(0, "COG-01", 0, Vector2i(2, 6), 13, true, Color("45a7ff")),
-		_make_unit(1, "BOLT-02", 0, Vector2i(1, 4), 10, false, Color("2d72cc")),
-		_make_unit(2, "RIVET-R", 1, Vector2i(6, 2), 12, true, Color("ff5b5b")),
-		_make_unit(3, "CLAW-R", 1, Vector2i(7, 4), 9, false, Color("cc3434")),
+		_make_unit(0, "COG-01", 0, Vector2i(2, 6), true, Color("45a7ff"), blue_a.loadout, blue_a.ai_profile, blue_a.level),
+		_make_unit(1, "BOLT-02", 0, Vector2i(1, 4), false, Color("2d72cc"), blue_b.loadout, blue_b.ai_profile, blue_b.level),
+		_make_unit(2, "RIVET-R", 1, Vector2i(6, 2), true, Color("ff5b5b"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.BOSS, 40),
+		_make_unit(3, "CLAW-R", 1, Vector2i(7, 4), false, Color("cc3434"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.ELITE, 20),
 	]
 	_start_round()
 
-func _make_unit(id: int, label: String, team: int, cell: Vector2i, propulsion: int, leader: bool, color: Color) -> Dictionary:
-	return {
+func _player_member(player_members: Array[Dictionary], index: int, fallback_loadout: Dictionary) -> Dictionary:
+	if index >= player_members.size():
+		return {"loadout":fallback_loadout,"level":1,"ai_profile":AiProfile.GENERAL}
+	var source: Dictionary = player_members[index]
+	# Raw loadout dictionaries from older callers remain valid.
+	if not source.has("loadout"):
+		return {"loadout":source,"level":1,"ai_profile":AiProfile.GENERAL}
+	var level := clampi(int(source.get("level", 1)), MedalProgression.MIN_LEVEL, MedalProgression.MAX_LEVEL)
+	return {"loadout":source.loadout,"level":level,"ai_profile":str(source.get("ai_profile", MedalProgression.ai_profile_for_level(level)))}
+
+func _make_unit(id: int, label: String, team: int, cell: Vector2i, leader: bool, color: Color, loadout: Dictionary, ai_profile: String = AiProfile.GENERAL, level: int = 1) -> Dictionary:
+	var normalized_level := clampi(level, MedalProgression.MIN_LEVEL, MedalProgression.MAX_LEVEL)
+	var unit := {
 		"id": id, "name": label, "team": team, "cell": cell,
-		"propulsion": propulsion, "leader": leader, "color": color,
+		"propulsion": 0, "leader": leader, "color": color, "ai_profile": ai_profile,
+		"level": normalized_level, "success_bonus": MedalProgression.success_bonus(normalized_level),
+		"medaforces": MedalProgression.unlocked_medaforces(normalized_level),
 		"ap": 0, "max_ap": 0, "mf": 0, "acted": false,
-		"parts": {"head": 40, "right": 32, "left": 32, "legs": 45},
-		"parts_max": {"head": 40, "right": 32, "left": 32, "legs": 45},
+		"equipment": {}, "parts": {}, "parts_max": {},
 	}
+	for slot in PartData.SLOTS:
+		_equip_unchecked(unit, slot, loadout[slot], true)
+	return unit
+
+func _equip_unchecked(unit: Dictionary, slot: String, part_id: String, restore_armor: bool) -> void:
+	var part := catalog.get_part(part_id)
+	unit.equipment[slot] = part
+	unit.parts_max[slot] = part.armor
+	if restore_armor or not unit.parts.has(slot): unit.parts[slot] = part.armor
+	else: unit.parts[slot] = mini(unit.parts[slot], part.armor)
+	if slot == "legs": unit.propulsion = part.propulsion
+
+func equipped_part(unit: Dictionary, slot: String) -> PartData:
+	if unit.is_empty() or not unit.equipment.has(slot): return null
+	return unit.equipment[slot]
+
+func _equipped_count(team: int, part_id: String, excluded_unit_id: int = -1) -> int:
+	var count := 0
+	for unit in units:
+		if unit.id != excluded_unit_id and unit.team == team:
+			for slot in PartData.SLOTS:
+				if equipped_part(unit, slot).id == part_id: count += 1
+	return count
+
+func available_parts(team: int, slot: String, unit_id: int = -1) -> Array[PartData]:
+	var result: Array[PartData] = []
+	for part_id: String in team_inventory.get(team, {}):
+		var part := catalog.get_part(part_id)
+		var owned: int = team_inventory[team][part_id]
+		if part != null and part.slot == slot and owned > _equipped_count(team, part_id, unit_id): result.append(part)
+	result.sort_custom(func(a: PartData, b: PartData): return a.display_name < b.display_name)
+	return result
+
+func can_reconfigure(unit_id: int) -> bool:
+	return unit_id >= 0 and unit_id < units.size() and units[unit_id].team == 0 and round_number == 1 and action_index == 0 and phase == "choose"
+
+func equip_part(unit_id: int, slot: String, part_id: String) -> bool:
+	if not can_reconfigure(unit_id) or not slot in PartData.SLOTS: return false
+	var part := catalog.get_part(part_id)
+	var team: int = units[unit_id].team
+	if part == null or part.slot != slot or team_inventory[team].get(part_id, 0) <= _equipped_count(team, part_id, unit_id): return false
+	_equip_unchecked(units[unit_id], slot, part_id, true)
+	_emit_log("%s：%sを%sへ装着しました。" % [units[unit_id].name, part.display_name, part_label(slot)])
+	changed.emit()
+	return true
 
 func _start_round() -> void:
 	round_number += 1
@@ -73,30 +138,30 @@ func current_unit() -> Dictionary:
 	if action_index < 0 or action_index >= action_order.size(): return {}
 	return units[action_order[action_index]]
 
-func action_data(action: String) -> Dictionary:
-	match action:
-		"head": return {"label": "頭部", "cost": 12, "range": 2, "damage": 12, "success": 9}
-		"right": return {"label": "右腕", "cost": 8, "range": 3, "damage": 10, "success": 7}
-		"left": return {"label": "左腕", "cost": 6, "range": 1, "damage": 14, "success": 5}
-		"move": return {"label": "移動のみ", "cost": 0, "range": 0, "damage": 0, "success": 0}
-	return {}
+func action_data(action: String, unit: Dictionary = {}) -> Dictionary:
+	if action == "move": return {"label": "移動のみ", "part_name": "脚部", "cost": 0, "range": 0, "damage": 0, "success": 0}
+	if not action in ["head", "right", "left"]: return {}
+	var owner := current_unit() if unit.is_empty() else unit
+	var part := equipped_part(owner, action)
+	return {} if part == null else part.action_data()
 
 # 脚部の残り装甲と推進値から算出する回避値。脚部破壊時は0（＝ほぼ確実に被弾）。
 func evasion_value(unit: Dictionary) -> int:
 	if unit.is_empty() or unit.parts.legs <= 0: return 0
-	var ratio := float(unit.parts.legs) / unit.parts_max.legs
-	return int((4.0 + unit.propulsion / 3.0) * ratio)
+	var ratio: float = float(unit.parts.legs) / unit.parts_max.legs
+	var legs := equipped_part(unit, "legs")
+	return int((legs.evasion_base + unit.propulsion / 3.0) * ratio)
 
 # 脚部の残り装甲から算出する防御値。命中したダメージをこの分だけ軽減する。
 func defense_value(unit: Dictionary) -> int:
 	if unit.is_empty() or unit.parts.legs <= 0: return 0
-	var ratio := float(unit.parts.legs) / unit.parts_max.legs
-	return int(4.0 * ratio)
+	var ratio: float = float(unit.parts.legs) / unit.parts_max.legs
+	return int(equipped_part(unit, "legs").defense_base * ratio)
 
 # 攻撃側の成功値と対象の回避値から命中率(%)を求める。
-func hit_chance(attacker: Dictionary, target: Dictionary, action: String) -> int:
-	var success: int = action_data(action).success + int(attacker.propulsion / 4)
-	return clampi(60 + (success - evasion_value(target)) * 5, 10, 95)
+func hit_chance(attacker: Dictionary, target: Dictionary, action: String) -> float:
+	var success: float = float(action_data(action, attacker).success + int(attacker.propulsion / 4)) + float(attacker.get("success_bonus", 0.0))
+	return clampf(60.0 + (success - evasion_value(target)) * 5.0, 10.0, 95.0)
 
 # 戦闘状態から決定論的に得る擬似乱数。テスト再現性のため乱数生成器を使わない。
 func _battle_roll(seed_value: int, salt: int, modulo: int) -> int:
@@ -106,7 +171,7 @@ func _battle_roll(seed_value: int, salt: int, modulo: int) -> int:
 func choose_action(action: String) -> bool:
 	if phase != "choose": return false
 	var unit := current_unit()
-	var data := action_data(action)
+	var data := action_data(action, unit)
 	if unit.is_empty() or data.is_empty() or unit.ap < data.cost: return false
 	if action != "move" and unit.parts[action] <= 0: return false
 	selected_action = action
@@ -139,11 +204,8 @@ func move_current(cell: Vector2i) -> bool:
 		finish_action()
 	else:
 		phase = "target"
-		var chances := PackedStringArray()
-		for target_id in targetable_units():
-			chances.append("%s %d%%" % [units[target_id].name, hit_chance(unit, units[target_id], selected_action)])
-		var summary := "（命中: %s）" % ", ".join(chances) if not chances.is_empty() else "（射程内に対象なし）"
-		_emit_log("%s：%dマス移動。攻撃対象を選択 %s" % [unit.name, distance, summary])
+		var guidance := "攻撃対象を選択してください。" if not targetable_units().is_empty() else "射程内に対象はいません。"
+		_emit_log("%s：%dマス移動。%s" % [unit.name, distance, guidance])
 		changed.emit()
 	return true
 
@@ -151,7 +213,7 @@ func targetable_units() -> Array[int]:
 	var result: Array[int] = []
 	if phase != "target": return result
 	var attacker := current_unit()
-	var attack_range: int = action_data(selected_action).range
+	var attack_range: int = action_data(selected_action, attacker).range
 	for unit in units:
 		if is_active(unit) and unit.team != attacker.team and _distance(attacker.cell, unit.cell) <= attack_range:
 			result.append(unit.id)
@@ -161,13 +223,13 @@ func attack(target_id: int) -> bool:
 	if not target_id in targetable_units(): return false
 	var attacker := current_unit()
 	var target := units[target_id]
-	var action := action_data(selected_action)
+	var action := action_data(selected_action, attacker)
 	var seed_value: int = round_number * 1000 + attacker.id * 100 + target.id * 10 + attacker.cell.x + attacker.cell.y
 	var chance := hit_chance(attacker, target, selected_action)
 	# 成功値 vs 回避値で命中判定。外れれば回避成功（ダメージ0）。
 	if _battle_roll(seed_value, 7, 100) >= chance:
-		last_attack = {"outcome": "evade", "attacker": attacker.id, "target": target.id, "part": "", "damage": 0, "chance": chance}
-		_emit_log("%sの%s！ %sが回避成功（命中%d%%）。" % [attacker.name, action.label, target.name, chance])
+		last_attack = {"outcome":"evade","attacker":attacker.id,"target":target.id,"part":"","damage":0,"chance":chance,"action_class":action["class"],"attack_family":action.family}
+		_emit_log("%sの%s！ %sが回避した！" % [attacker.name, action.label, target.name])
 		finish_action()
 		return true
 	var candidates: Array[String] = []
@@ -181,7 +243,7 @@ func attack(target_id: int) -> bool:
 		damage -= active_team_count(target.team)
 	damage = max(1, damage)
 	target.parts[part] = max(0, target.parts[part] - damage)
-	last_attack = {"outcome": "hit", "attacker": attacker.id, "target": target.id, "part": part, "damage": damage, "chance": chance}
+	last_attack = {"outcome":"hit","attacker":attacker.id,"target":target.id,"part":part,"damage":damage,"chance":chance,"action_class":action["class"],"attack_family":action.family}
 	var note := "（防御-%d）" % defense if defense > 0 else ""
 	_emit_log("%sの%s命中！ %sの%sへ%dダメージ%s。" % [attacker.name, action.label, target.name, part_label(part), damage, note])
 	if target.parts[part] == 0:
@@ -213,24 +275,12 @@ func finish_action() -> void:
 func auto_act() -> void:
 	var actor := current_unit()
 	if actor.is_empty(): return
-	var enemies: Array[Dictionary] = []
-	for unit in units:
-		if is_active(unit) and unit.team != actor.team: enemies.append(unit)
-	if enemies.is_empty(): return
-	enemies.sort_custom(func(a: Dictionary, b: Dictionary): return _distance(actor.cell, a.cell) < _distance(actor.cell, b.cell))
-	var target := enemies[0]
-	var action := "right" if actor.ap >= 8 and actor.parts.right > 0 else "move"
-	choose_action(action)
-	var desired: Vector2i = actor.cell
-	var best_distance := _distance(actor.cell, target.cell)
-	for cell in reachable_cells():
-		var distance := _distance(cell, target.cell)
-		if distance < best_distance:
-			best_distance = distance
-			desired = cell
-	move_current(desired)
+	var decision := ai_controller.choose_action(self, actor)
+	if decision.is_empty(): finish_action(); return
+	choose_action(decision.action)
+	move_current(decision.cell)
 	if phase == "target":
-		if target.id in targetable_units(): attack(target.id)
+		if decision.target_id in targetable_units(): attack(decision.target_id)
 		else: finish_action()
 
 func unit_at(cell: Vector2i) -> Dictionary:

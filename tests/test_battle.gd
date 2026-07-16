@@ -11,6 +11,7 @@ func _initialize() -> void:
 	_test_action_taxonomy()
 	_test_ai_profiles()
 	_test_unit_id_index()
+	_test_ally_auto_control()
 	if failures == 0:
 		print("PASS: battle model tests")
 		quit(0)
@@ -153,3 +154,14 @@ func _test_unit_id_index() -> void:
 	_expect(battle.choose_action("right"), "reordered unit can choose an action")
 	_expect(battle.move_current(Vector2i(5, 2)), "reordered unit can move")
 	_expect(battle.attack(30), "target lookup resolves a non-contiguous id")
+
+func _test_ally_auto_control() -> void:
+	var battle := BattleState.new()
+	_setup_standard_battle(battle)
+	_expect(battle.is_player_controlled(battle.unit_by_id(0)), "player leader remains manually controlled")
+	_expect(battle.should_auto_act(battle.unit_by_id(1)), "player partner uses auto control")
+	_expect(battle.should_auto_act(battle.unit_by_id(2)), "enemy units use auto control")
+	battle.action_index = battle.action_order.find(1)
+	battle.phase = "choose"
+	battle.auto_act()
+	_expect(battle.unit_by_id(1).acted, "ally auto AI completes its own turn")

@@ -24,6 +24,7 @@ func _test_roster_equipment_reaches_battle() -> void:
 	var data := GameData.new()
 	data.new_game()
 	_expect(data.roster.size() == 2, "new game creates a two-unit roster")
+	_expect(data.roster[0].controllable and not data.roster[1].controllable, "new game assigns manual leader and auto partner")
 	_expect(data.equip(0, "right", "prism_cannon"), "RPG menu data can equip an owned part")
 	var battle := BattleState.new()
 	battle.setup_demo(data.player_loadouts())
@@ -70,6 +71,7 @@ func _test_save_and_load() -> void:
 	_expect(loaded.player_cell == Vector2i(8, 9), "field position survives save")
 	_expect(loaded.battles_won == 3, "progress survives save")
 	_expect(loaded.roster[0].experience == 125, "medal experience survives save")
+	_expect(loaded.roster[0].controllable and not loaded.roster[1].controllable, "control modes survive save")
 	_expect(loaded.roster[0].loadout.legs == "hover_base", "equipment survives save")
 
 func _test_v1_save_migration() -> void:
@@ -87,4 +89,5 @@ func _test_v1_save_migration() -> void:
 	_expect(loaded.load_game(), "version 1 saves remain loadable")
 	_expect(loaded.roster[0].experience == 0, "legacy saves start with zero experience")
 	_expect(loaded.member_level(loaded.roster[0]) == 1, "legacy saves migrate to level 1")
+	_expect(loaded.roster[0].controllable, "legacy leaders default to manual control")
 	_expect(typeof(loaded.inventory.cog_sensor) == TYPE_INT, "JSON inventory counts normalize back to integers")

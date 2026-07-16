@@ -52,7 +52,9 @@ func _ready() -> void:
 func open_for(data: GameData) -> void:
 	game_data = data
 	member_options.clear()
-	for member in game_data.roster: member_options.add_item(("LEADER  " if member.leader else "MEMBER  ") + member.name + "  Lv.%d" % game_data.member_level(member))
+	for member in game_data.roster:
+		var control_label := "手動" if bool(member.get("controllable", member.leader)) else "AUTO"
+		member_options.add_item(("LEADER  " if member.leader else "MEMBER  ") + member.name + "  Lv.%d  [%s]" % [game_data.member_level(member), control_label])
 	member_index = clampi(member_index, 0, game_data.roster.size() - 1)
 	member_options.select(member_index)
 	notice.text = ""
@@ -91,6 +93,7 @@ func _update_detail() -> void:
 	var experience := int(member.get("experience", 0))
 	var next_experience := MedalProgression.experience_for_level(mini(level + 1, MedalProgression.MAX_LEVEL))
 	var ai_label := "強敵" if MedalProgression.ai_profile_for_level(level) == AiProfile.ELITE else "一般"
+	var control_label := "手動" if bool(member.get("controllable", member.leader)) else "AUTO"
 	var mf_names := PackedStringArray()
 	for medaforce in MedalProgression.unlocked_medaforces(level): mf_names.append(medaforce.name)
-	detail.text = "機体: %s　Lv.%d　EXP %d/%d　成功補正 +%.1f\n推進 %d　基礎回避 %d　防御 %d　AUTO %s\nMF: %s" % [member.name, level, experience, next_experience, MedalProgression.success_bonus(level), legs.propulsion, legs.evasion_base, legs.defense_base, ai_label, " / ".join(mf_names)]
+	detail.text = "機体: %s　Lv.%d　EXP %d/%d　成功補正 +%.1f\n推進 %d　基礎回避 %d　防御 %d　操作 %s（AI %s）\nMF: %s" % [member.name, level, experience, next_experience, MedalProgression.success_bonus(level), legs.propulsion, legs.evasion_base, legs.defense_base, control_label, ai_label, " / ".join(mf_names)]

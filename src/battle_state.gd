@@ -6,6 +6,8 @@ signal log_added(message: String)
 signal battle_finished(message: String)
 
 const BOARD_SIZE := 9
+const CONTROL_PLAYER := "player"
+const CONTROL_AUTO := "auto"
 const GENERATORS := {
 	Vector2i(1, 1): 0, Vector2i(1, 7): 0,
 	Vector2i(7, 1): 1, Vector2i(7, 7): 1,
@@ -31,10 +33,10 @@ func setup_demo(player_members: Array[Dictionary] = []) -> void:
 	var blue_a := _player_member(player_members, 0, {"head":"cog_sensor","right":"bolt_rifle","left":"impact_knuckle","legs":"walker_legs"})
 	var blue_b := _player_member(player_members, 1, {"head":"fortress_core","right":"prism_cannon","left":"needle_claw","legs":"hover_base"})
 	units = [
-		_make_unit(0, "COG-01", 0, Vector2i(2, 6), true, Color("45a7ff"), blue_a.loadout, blue_a.ai_profile, blue_a.level),
-		_make_unit(1, "BOLT-02", 0, Vector2i(1, 4), false, Color("2d72cc"), blue_b.loadout, blue_b.ai_profile, blue_b.level),
-		_make_unit(2, "RIVET-R", 1, Vector2i(6, 2), true, Color("ff5b5b"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.BOSS, 40),
-		_make_unit(3, "CLAW-R", 1, Vector2i(7, 4), false, Color("cc3434"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.ELITE, 20),
+		_make_unit(0, "COG-01", 0, Vector2i(2, 6), true, Color("45a7ff"), blue_a.loadout, blue_a.ai_profile, blue_a.level, blue_a.control_mode),
+		_make_unit(1, "BOLT-02", 0, Vector2i(1, 4), false, Color("2d72cc"), blue_b.loadout, blue_b.ai_profile, blue_b.level, blue_b.control_mode),
+		_make_unit(2, "RIVET-R", 1, Vector2i(6, 2), true, Color("ff5b5b"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.BOSS, 40, CONTROL_AUTO),
+		_make_unit(3, "CLAW-R", 1, Vector2i(7, 4), false, Color("cc3434"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.ELITE, 20, CONTROL_AUTO),
 	]
 	_rebuild_unit_index()
 	_start_round()
@@ -51,21 +53,28 @@ func _rebuild_unit_index() -> void:
 func unit_by_id(unit_id: int) -> Dictionary:
 	return units_by_id.get(unit_id, {})
 
+func is_player_controlled(unit: Dictionary) -> bool:
+	return not unit.is_empty() and unit.get("control_mode", CONTROL_AUTO) == CONTROL_PLAYER
+
+func should_auto_act(unit: Dictionary) -> bool:
+	return not unit.is_empty() and unit.get("control_mode", CONTROL_AUTO) == CONTROL_AUTO
+
 func _player_member(player_members: Array[Dictionary], index: int, fallback_loadout: Dictionary) -> Dictionary:
+	var fallback_control := CONTROL_PLAYER if index == 0 else CONTROL_AUTO
 	if index >= player_members.size():
-		return {"loadout":fallback_loadout,"level":1,"ai_profile":AiProfile.GENERAL}
+		return {"loadout":fallback_loadout,"level":1,"ai_profile":AiProfile.GENERAL,"control_mode":fallback_control}
 	var source: Dictionary = player_members[index]
 	# Raw loadout dictionaries from older callers remain valid.
 	if not source.has("loadout"):
-		return {"loadout":source,"level":1,"ai_profile":AiProfile.GENERAL}
+		return {"loadout":source,"level":1,"ai_profile":AiProfile.GENERAL,"control_mode":fallback_control}
 	var level := clampi(int(source.get("level", 1)), MedalProgression.MIN_LEVEL, MedalProgression.MAX_LEVEL)
-	return {"loadout":source.loadout,"level":level,"ai_profile":str(source.get("ai_profile", MedalProgression.ai_profile_for_level(level)))}
+	return {"loadout":source.loadout,"level":level,"ai_profile":str(source.get("ai_profile", MedalProgression.ai_profile_for_level(level))),"control_mode":str(source.get("control_mode", fallback_control))}
 
-func _make_unit(id: int, label: String, team: int, cell: Vector2i, leader: bool, color: Color, loadout: Dictionary, ai_profile: String = AiProfile.GENERAL, level: int = 1) -> Dictionary:
+func _make_unit(id: int, label: String, team: int, cell: Vector2i, leader: bool, color: Color, loadout: Dictionary, ai_profile: String = AiProfile.GENERAL, level: int = 1, control_mode: String = CONTROL_AUTO) -> Dictionary:
 	var normalized_level := clampi(level, MedalProgression.MIN_LEVEL, MedalProgression.MAX_LEVEL)
 	var unit := {
 		"id": id, "name": label, "team": team, "cell": cell,
-		"propulsion": 0, "leader": leader, "color": color, "ai_profile": ai_profile,
+		"propulsion": 0, "leader": leader, "color": color, "ai_profile": ai_profile, "control_mode": control_mode,
 		"level": normalized_level, "success_bonus": MedalProgression.success_bonus(normalized_level),
 		"medaforces": MedalProgression.unlocked_medaforces(normalized_level),
 		"ap": 0, "max_ap": 0, "mf": 0, "acted": false,

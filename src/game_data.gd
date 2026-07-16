@@ -12,8 +12,8 @@ var battles_won := 0
 
 func new_game() -> void:
 	roster = [
-		{"name":"COG-01","leader":true,"experience":0,"loadout":{"head":"cog_sensor","right":"bolt_rifle","left":"impact_knuckle","legs":"walker_legs"}},
-		{"name":"BOLT-02","leader":false,"experience":0,"loadout":{"head":"fortress_core","right":"prism_cannon","left":"needle_claw","legs":"hover_base"}},
+		{"name":"COG-01","leader":true,"controllable":true,"experience":0,"loadout":{"head":"cog_sensor","right":"bolt_rifle","left":"impact_knuckle","legs":"walker_legs"}},
+		{"name":"BOLT-02","leader":false,"controllable":false,"experience":0,"loadout":{"head":"fortress_core","right":"prism_cannon","left":"needle_claw","legs":"hover_base"}},
 	]
 	player_cell = Vector2i(3, 10)
 	battles_won = 0
@@ -31,6 +31,7 @@ func player_battle_members() -> Array[Dictionary]:
 			"loadout": member.loadout.duplicate(true),
 			"level": level,
 			"ai_profile": MedalProgression.ai_profile_for_level(level),
+			"control_mode": BattleState.CONTROL_PLAYER if bool(member.get("controllable", member.leader)) else BattleState.CONTROL_AUTO,
 			"medaforces": MedalProgression.unlocked_medaforces(level),
 		})
 	return result
@@ -73,7 +74,7 @@ func save_game() -> bool:
 	if file == null: return false
 	var serial_roster: Array[Dictionary] = []
 	for member in roster:
-		serial_roster.append({"name":member.name,"leader":member.leader,"experience":int(member.get("experience", 0)),"loadout":member.loadout})
+		serial_roster.append({"name":member.name,"leader":member.leader,"controllable":bool(member.get("controllable", member.leader)),"experience":int(member.get("experience", 0)),"loadout":member.loadout})
 	file.store_string(JSON.stringify({"version":SAVE_VERSION,"player_cell":[player_cell.x,player_cell.y],"battles_won":battles_won,"inventory":inventory,"roster":serial_roster}, "\t"))
 	return true
 
@@ -92,5 +93,5 @@ func load_game() -> bool:
 		inventory[str(part_id)] = int(loaded_inventory[part_id])
 	roster.clear()
 	for member in parsed.get("roster", []):
-		roster.append({"name":str(member.name),"leader":bool(member.leader),"experience":int(member.get("experience", 0)),"loadout":member.loadout})
+		roster.append({"name":str(member.name),"leader":bool(member.leader),"controllable":bool(member.get("controllable", member.leader)),"experience":int(member.get("experience", 0)),"loadout":member.loadout})
 	return not roster.is_empty()

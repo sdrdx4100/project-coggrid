@@ -16,13 +16,24 @@ func _replace_screen(screen: Control) -> void:
 	add_child(current_screen)
 
 func show_title() -> void:
-	if menu != null: menu.queue_free(); menu = null
+	_clear_menu()
 	var title := TitleScreen.new()
-	title.new_game_requested.connect(func(): game_data.new_game(); show_field())
-	title.continue_requested.connect(func():
-		if game_data.load_game(): show_field()
-	)
+	title.new_game_requested.connect(_on_new_game_requested)
+	title.continue_requested.connect(_on_continue_requested)
 	_replace_screen(title)
+
+func _on_new_game_requested() -> void:
+	game_data.new_game()
+	show_field()
+
+func _on_continue_requested() -> void:
+	if game_data.load_game():
+		show_field()
+
+func _clear_menu() -> void:
+	if menu == null: return
+	menu.queue_free()
+	menu = null
 
 func show_field() -> void:
 	var field := OverworldScreen.new()
@@ -42,7 +53,7 @@ func show_menu() -> void:
 	menu.open_for(game_data)
 
 func show_battle() -> void:
-	if menu != null: menu.queue_free(); menu = null
+	_clear_menu()
 	var battle_screen := BattleScreen.new()
 	battle_screen.game_data = game_data
 	battle_screen.battle_completed.connect(_on_battle_completed)

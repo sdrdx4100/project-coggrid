@@ -86,7 +86,10 @@ func load_game() -> bool:
 	var cell: Array = parsed.get("player_cell", [3, 10])
 	player_cell = Vector2i(int(cell[0]), int(cell[1]))
 	battles_won = int(parsed.get("battles_won", 0))
-	inventory = parsed.get("inventory", inventory)
+	var loaded_inventory: Dictionary = parsed.get("inventory", inventory)
+	inventory = {}
+	for part_id in loaded_inventory:
+		inventory[str(part_id)] = int(loaded_inventory[part_id])
 	roster.clear()
 	for member in parsed.get("roster", []):
 		roster.append({"name":str(member.name),"leader":bool(member.leader),"experience":int(member.get("experience", 0)),"loadout":member.loadout})

@@ -87,3 +87,4 @@ func _test_v1_save_migration() -> void:
 	_expect(loaded.load_game(), "version 1 saves remain loadable")
 	_expect(loaded.roster[0].experience == 0, "legacy saves start with zero experience")
 	_expect(loaded.member_level(loaded.roster[0]) == 1, "legacy saves migrate to level 1")
+	_expect(typeof(loaded.inventory.cog_sensor) == TYPE_INT, "JSON inventory counts normalize back to integers")

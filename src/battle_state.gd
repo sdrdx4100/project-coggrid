@@ -12,6 +12,7 @@ const GENERATORS := {
 }
 
 var units: Array[Dictionary] = []
+var units_by_id: Dictionary = {}
 var round_number := 0
 var action_order: Array[int] = []
 var action_index := 0
@@ -28,14 +29,27 @@ var team_inventory := {
 
 func setup_demo(player_members: Array[Dictionary] = []) -> void:
 	var blue_a := _player_member(player_members, 0, {"head":"cog_sensor","right":"bolt_rifle","left":"impact_knuckle","legs":"walker_legs"})
-	var blue_b := _player_member(player_members, 1, {"head":"fortress_core","right":"prism_cannon","left":"needle_claw","legs":"walker_legs"})
+	var blue_b := _player_member(player_members, 1, {"head":"fortress_core","right":"prism_cannon","left":"needle_claw","legs":"hover_base"})
 	units = [
 		_make_unit(0, "COG-01", 0, Vector2i(2, 6), true, Color("45a7ff"), blue_a.loadout, blue_a.ai_profile, blue_a.level),
 		_make_unit(1, "BOLT-02", 0, Vector2i(1, 4), false, Color("2d72cc"), blue_b.loadout, blue_b.ai_profile, blue_b.level),
 		_make_unit(2, "RIVET-R", 1, Vector2i(6, 2), true, Color("ff5b5b"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.BOSS, 40),
 		_make_unit(3, "CLAW-R", 1, Vector2i(7, 4), false, Color("cc3434"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.ELITE, 20),
 	]
+	_rebuild_unit_index()
 	_start_round()
+
+func _rebuild_unit_index() -> void:
+	units_by_id.clear()
+	for unit in units:
+		var unit_id := int(unit.id)
+		if units_by_id.has(unit_id):
+			push_error("Duplicate battle unit id: %d" % unit_id)
+			continue
+		units_by_id[unit_id] = unit
+
+func unit_by_id(unit_id: int) -> Dictionary:
+	return units_by_id.get(unit_id, {})
 
 func _player_member(player_members: Array[Dictionary], index: int, fallback_loadout: Dictionary) -> Dictionary:
 	if index >= player_members.size():
@@ -91,15 +105,17 @@ func available_parts(team: int, slot: String, unit_id: int = -1) -> Array[PartDa
 	return result
 
 func can_reconfigure(unit_id: int) -> bool:
-	return unit_id >= 0 and unit_id < units.size() and units[unit_id].team == 0 and round_number == 1 and action_index == 0 and phase == "choose"
+	var unit := unit_by_id(unit_id)
+	return not unit.is_empty() and unit.team == 0 and round_number == 1 and action_index == 0 and phase == "choose"
 
 func equip_part(unit_id: int, slot: String, part_id: String) -> bool:
 	if not can_reconfigure(unit_id) or not slot in PartData.SLOTS: return false
 	var part := catalog.get_part(part_id)
-	var team: int = units[unit_id].team
+	var unit := unit_by_id(unit_id)
+	var team: int = unit.team
 	if part == null or part.slot != slot or team_inventory[team].get(part_id, 0) <= _equipped_count(team, part_id, unit_id): return false
-	_equip_unchecked(units[unit_id], slot, part_id, true)
-	_emit_log("%s：%sを%sへ装着しました。" % [units[unit_id].name, part.display_name, part_label(slot)])
+	_equip_unchecked(unit, slot, part_id, true)
+	_emit_log("%s：%sを%sへ装着しました。" % [unit.name, part.display_name, part_label(slot)])
 	changed.emit()
 	return true
 
@@ -118,7 +134,7 @@ func _start_round() -> void:
 	action_order.clear()
 	for unit in units:
 		if is_active(unit): action_order.append(unit.id)
-	action_order.sort_custom(func(a: int, b: int): return units[a].propulsion > units[b].propulsion)
+	action_order.sort_custom(func(a: int, b: int): return unit_by_id(a).propulsion > unit_by_id(b).propulsion)
 	action_index = 0
 	selected_action = ""
 	phase = "choose"
@@ -136,7 +152,7 @@ func _captured_generators(team: int) -> int:
 
 func current_unit() -> Dictionary:
 	if action_index < 0 or action_index >= action_order.size(): return {}
-	return units[action_order[action_index]]
+	return unit_by_id(action_order[action_index])
 
 func action_data(action: String, unit: Dictionary = {}) -> Dictionary:
 	if action == "move": return {"label": "移動のみ", "part_name": "脚部", "cost": 0, "range": 0, "damage": 0, "success": 0}
@@ -222,7 +238,8 @@ func targetable_units() -> Array[int]:
 func attack(target_id: int) -> bool:
 	if not target_id in targetable_units(): return false
 	var attacker := current_unit()
-	var target := units[target_id]
+	var target := unit_by_id(target_id)
+	if target.is_empty(): return false
 	var action := action_data(selected_action, attacker)
 	var seed_value: int = round_number * 1000 + attacker.id * 100 + target.id * 10 + attacker.cell.x + attacker.cell.y
 	var chance := hit_chance(attacker, target, selected_action)
@@ -262,7 +279,7 @@ func finish_action() -> void:
 		unit.acted = true
 	selected_action = ""
 	action_index += 1
-	while action_index < action_order.size() and not is_active(units[action_order[action_index]]):
+	while action_index < action_order.size() and not is_active(unit_by_id(action_order[action_index])):
 		action_index += 1
 	if winner >= 0:
 		phase = "finished"
@@ -276,7 +293,9 @@ func auto_act() -> void:
 	var actor := current_unit()
 	if actor.is_empty(): return
 	var decision := ai_controller.choose_action(self, actor)
-	if decision.is_empty(): finish_action(); return
+	if decision.is_empty():
+		finish_action()
+		return
 	choose_action(decision.action)
 	move_current(decision.cell)
 	if phase == "target":

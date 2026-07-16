@@ -45,7 +45,7 @@ func open_for(state: BattleState, target_unit_id: int) -> void:
 
 func _rebuild() -> void:
 	for child in rows.get_children(): child.queue_free()
-	var unit := battle.units[unit_id]
+	var unit := battle.unit_by_id(unit_id)
 	title_label.text = "SETTING — " + unit.name
 	for slot in PartData.SLOTS:
 		var line := HBoxContainer.new()
@@ -71,7 +71,7 @@ func _on_part_selected(index: int, slot: String, options: OptionButton) -> void:
 	_update_detail()
 
 func _update_detail() -> void:
-	var unit := battle.units[unit_id]
+	var unit := battle.unit_by_id(unit_id)
 	var names := PackedStringArray()
 	for slot in PartData.SLOTS:
 		names.append("%s: %s" % [battle.part_label(slot), battle.equipped_part(unit, slot).display_name])

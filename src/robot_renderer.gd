@@ -3,7 +3,6 @@ extends RefCounted
 
 static func draw_robot(canvas: CanvasItem, center: Vector2, scale: float, unit: Dictionary, compact := false) -> void:
 	if unit.is_empty(): return
-	var facing := 1.0 if int(unit.get("team", 0)) == 0 else -1.0
 	var armor: Color = unit.color
 	var shadow := Color(0.015, 0.035, 0.08, 0.48)
 	var dark := armor.darkened(0.55)
@@ -18,9 +17,9 @@ static func draw_robot(canvas: CanvasItem, center: Vector2, scale: float, unit: 
 	_draw_ellipse(canvas, center + Vector2(0, 27) * scale, Vector2(27, 8) * scale, shadow)
 	_draw_legs(canvas, center, scale, armor, dark, edge, legs_hover, _alive(parts, "legs"))
 	_draw_body(canvas, center, scale, armor, dark, edge, light, _alive(parts, "head"))
-	_draw_arm(canvas, center, scale, -1.0, facing, armor, dark, edge, false, _alive(parts, "left"))
-	_draw_arm(canvas, center, scale, 1.0, facing, armor, dark, edge, right_cannon, _alive(parts, "right"))
-	_draw_head(canvas, center, scale, facing, armor, dark, edge, light, visor, _alive(parts, "head"), compact)
+	_draw_arm(canvas, center, scale, -1.0, armor, dark, edge, false, _alive(parts, "left"))
+	_draw_arm(canvas, center, scale, 1.0, armor, dark, edge, right_cannon, _alive(parts, "right"))
+	_draw_head(canvas, center, scale, armor, dark, edge, light, visor, _alive(parts, "head"), compact)
 
 static func _alive(parts: Dictionary, slot: String) -> bool:
 	return int(parts.get(slot, 1)) > 0
@@ -41,27 +40,29 @@ static func _draw_ellipse(canvas: CanvasItem, center: Vector2, radius: Vector2, 
 	canvas.draw_colored_polygon(points, color)
 
 static func _draw_body(canvas: CanvasItem, center: Vector2, scale: float, armor: Color, dark: Color, edge: Color, light: Color, alive: bool) -> void:
-	_poly(canvas, center, scale, [Vector2(-20,-12),Vector2(-12,-22),Vector2(12,-22),Vector2(21,-11),Vector2(16,14),Vector2(7,20),Vector2(-9,19),Vector2(-18,11)], _part_color(edge, alive))
-	_poly(canvas, center, scale, [Vector2(-16,-11),Vector2(-10,-18),Vector2(10,-18),Vector2(17,-9),Vector2(12,11),Vector2(5,16),Vector2(-7,15),Vector2(-14,9)], _part_color(armor, alive))
+	_poly(canvas, center, scale, [Vector2(-17,-12),Vector2(-10,-21),Vector2(10,-21),Vector2(18,-11),Vector2(14,14),Vector2(6,20),Vector2(-7,19),Vector2(-15,11)], _part_color(edge, alive))
+	_poly(canvas, center, scale, [Vector2(-13,-11),Vector2(-8,-17),Vector2(8,-17),Vector2(14,-9),Vector2(10,11),Vector2(4,16),Vector2(-5,15),Vector2(-11,9)], _part_color(armor, alive))
 	_poly(canvas, center, scale, [Vector2(-9,-15),Vector2(8,-15),Vector2(11,-4),Vector2(-6,-1)], _part_color(light, alive))
 	canvas.draw_line(center + Vector2(-10, 6) * scale, center + Vector2(10, 6) * scale, _part_color(dark, alive), maxf(1.0, 2.2 * scale))
 
-static func _draw_head(canvas: CanvasItem, center: Vector2, scale: float, facing: float, armor: Color, dark: Color, edge: Color, light: Color, visor: Color, alive: bool, compact: bool) -> void:
+static func _draw_head(canvas: CanvasItem, center: Vector2, scale: float, armor: Color, dark: Color, edge: Color, light: Color, visor: Color, alive: bool, compact: bool) -> void:
 	var y := -30.0
-	_poly(canvas, center, scale, [Vector2(-17,y-7),Vector2(-8,y-14),Vector2(13,y-11),Vector2(19,y-3),Vector2(13,y+8),Vector2(-13,y+8),Vector2(-20,y+1)], _part_color(edge, alive))
-	_poly(canvas, center, scale, [Vector2(-14,y-5),Vector2(-7,y-11),Vector2(11,y-8),Vector2(15,y-2),Vector2(10,y+4),Vector2(-12,y+4),Vector2(-16,y)], _part_color(armor, alive))
-	_poly(canvas, center, scale, [Vector2(-11,y-3),Vector2(11,y-2),Vector2(8,y+3),Vector2(-12,y+2)], visor if alive else Color("29343d"))
+	_poly(canvas, center, scale, [Vector2(-17,y-5),Vector2(-9,y-13),Vector2(9,y-13),Vector2(17,y-5),Vector2(15,y+7),Vector2(-15,y+7)], _part_color(edge, alive))
+	_poly(canvas, center, scale, [Vector2(-13,y-4),Vector2(-7,y-9),Vector2(7,y-9),Vector2(13,y-4),Vector2(11,y+3),Vector2(-11,y+3)], _part_color(armor, alive))
+	_poly(canvas, center, scale, [Vector2(-10,y-3),Vector2(10,y-3),Vector2(8,y+2),Vector2(-8,y+2)], visor if alive else Color("29343d"))
 	if not compact:
-		_poly(canvas, center, scale, [Vector2(-5,y-11),Vector2(1,y-24),Vector2(5,y-10)], _part_color(light, alive))
-		canvas.draw_circle(center + Vector2(9 * facing, y) * scale, 2.1 * scale, Color("efffff") if alive else Color("4b5155"))
+		_poly(canvas, center, scale, [Vector2(-4,y-11),Vector2(0,y-23),Vector2(4,y-11)], _part_color(light, alive))
+		var eye_color := Color("efffff") if alive else Color("4b5155")
+		canvas.draw_circle(center + Vector2(-5, y) * scale, 1.5 * scale, eye_color)
+		canvas.draw_circle(center + Vector2(5, y) * scale, 1.5 * scale, eye_color)
 
-static func _draw_arm(canvas: CanvasItem, center: Vector2, scale: float, side: float, facing: float, armor: Color, dark: Color, edge: Color, cannon: bool, alive: bool) -> void:
-	var x := 24.0 * side
-	canvas.draw_circle(center + Vector2(x, -9) * scale, 10 * scale, _part_color(edge, alive))
-	_poly(canvas, center, scale, [Vector2(x-7*side,-16),Vector2(x+8*side,-14),Vector2(x+12*side,-4),Vector2(x+5*side,2),Vector2(x-8*side,-2)], _part_color(armor, alive))
-	var forearm_x := x + 7.0 * side
-	_poly(canvas, center, scale, [Vector2(forearm_x-7*side,0),Vector2(forearm_x+8*side,-2),Vector2(forearm_x+11*side,18),Vector2(forearm_x+3*side,24),Vector2(forearm_x-8*side,17)], _part_color(edge, alive))
-	_poly(canvas, center, scale, [Vector2(forearm_x-4*side,2),Vector2(forearm_x+5*side,1),Vector2(forearm_x+7*side,16),Vector2(forearm_x+1*side,20),Vector2(forearm_x-5*side,15)], _part_color(dark, alive))
+static func _draw_arm(canvas: CanvasItem, center: Vector2, scale: float, side: float, armor: Color, dark: Color, edge: Color, cannon: bool, alive: bool) -> void:
+	var x := 21.0 * side
+	canvas.draw_circle(center + Vector2(x, -8) * scale, 7.5 * scale, _part_color(edge, alive))
+	_poly(canvas, center, scale, [Vector2(x-5*side,-13),Vector2(x+6*side,-12),Vector2(x+8*side,-4),Vector2(x+4*side,1),Vector2(x-6*side,-1)], _part_color(armor, alive))
+	var forearm_x := x + 5.0 * side
+	_poly(canvas, center, scale, [Vector2(forearm_x-5*side,1),Vector2(forearm_x+6*side,0),Vector2(forearm_x+8*side,17),Vector2(forearm_x+2*side,22),Vector2(forearm_x-6*side,16)], _part_color(edge, alive))
+	_poly(canvas, center, scale, [Vector2(forearm_x-3*side,3),Vector2(forearm_x+4*side,2),Vector2(forearm_x+5*side,15),Vector2(forearm_x+1*side,18),Vector2(forearm_x-4*side,14)], _part_color(dark, alive))
 	if cannon and alive:
 		var muzzle := center + Vector2(forearm_x + 7.0 * side, 16) * scale
 		canvas.draw_circle(muzzle, 5.0 * scale, edge)

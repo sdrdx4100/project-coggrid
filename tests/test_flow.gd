@@ -38,6 +38,7 @@ func _run() -> void:
 	await process_frame
 	_expect(app.current_screen is OverworldScreen, "battle result returns to field")
 	_expect(app.game_data.battles_won == 1, "confirmed victory updates RPG progress")
+	_expect(app.game_data.roster[0].experience == MedalProgression.WIN_EXPERIENCE, "confirmed victory grants medal experience")
 	app.show_battle()
 	await process_frame
 	app.current_screen.battle.units[0].parts.head = 0
@@ -49,6 +50,7 @@ func _run() -> void:
 	await process_frame
 	_expect(app.current_screen is OverworldScreen, "confirmed loss also returns to field")
 	_expect(app.game_data.battles_won == 1, "loss does not increase victories")
+	_expect(app.game_data.roster[0].experience == MedalProgression.WIN_EXPERIENCE + MedalProgression.LOSS_EXPERIENCE, "confirmed loss grants the smaller experience reward")
 	if failures == 0:
 		print("PASS: screen flow tests")
 		quit(0)

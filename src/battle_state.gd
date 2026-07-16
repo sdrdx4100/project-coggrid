@@ -26,21 +26,34 @@ var team_inventory := {
 	1: {"rivet_core": 2, "red_rifle": 2, "red_claw": 2, "rivet_legs": 2},
 }
 
-func setup_demo(player_loadouts: Array[Dictionary] = []) -> void:
-	var blue_a := player_loadouts[0] if player_loadouts.size() > 0 else {"head":"cog_sensor","right":"bolt_rifle","left":"impact_knuckle","legs":"walker_legs"}
-	var blue_b := player_loadouts[1] if player_loadouts.size() > 1 else {"head":"fortress_core","right":"prism_cannon","left":"needle_claw","legs":"walker_legs"}
+func setup_demo(player_members: Array[Dictionary] = []) -> void:
+	var blue_a := _player_member(player_members, 0, {"head":"cog_sensor","right":"bolt_rifle","left":"impact_knuckle","legs":"walker_legs"})
+	var blue_b := _player_member(player_members, 1, {"head":"fortress_core","right":"prism_cannon","left":"needle_claw","legs":"walker_legs"})
 	units = [
-		_make_unit(0, "COG-01", 0, Vector2i(2, 6), true, Color("45a7ff"), blue_a, "player"),
-		_make_unit(1, "BOLT-02", 0, Vector2i(1, 4), false, Color("2d72cc"), blue_b, "player"),
-		_make_unit(2, "RIVET-R", 1, Vector2i(6, 2), true, Color("ff5b5b"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.BOSS),
-		_make_unit(3, "CLAW-R", 1, Vector2i(7, 4), false, Color("cc3434"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.ELITE),
+		_make_unit(0, "COG-01", 0, Vector2i(2, 6), true, Color("45a7ff"), blue_a.loadout, blue_a.ai_profile, blue_a.level),
+		_make_unit(1, "BOLT-02", 0, Vector2i(1, 4), false, Color("2d72cc"), blue_b.loadout, blue_b.ai_profile, blue_b.level),
+		_make_unit(2, "RIVET-R", 1, Vector2i(6, 2), true, Color("ff5b5b"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.BOSS, 40),
+		_make_unit(3, "CLAW-R", 1, Vector2i(7, 4), false, Color("cc3434"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.ELITE, 20),
 	]
 	_start_round()
 
-func _make_unit(id: int, label: String, team: int, cell: Vector2i, leader: bool, color: Color, loadout: Dictionary, ai_profile: String = AiProfile.GENERAL) -> Dictionary:
+func _player_member(player_members: Array[Dictionary], index: int, fallback_loadout: Dictionary) -> Dictionary:
+	if index >= player_members.size():
+		return {"loadout":fallback_loadout,"level":1,"ai_profile":AiProfile.GENERAL}
+	var source: Dictionary = player_members[index]
+	# Raw loadout dictionaries from older callers remain valid.
+	if not source.has("loadout"):
+		return {"loadout":source,"level":1,"ai_profile":AiProfile.GENERAL}
+	var level := clampi(int(source.get("level", 1)), MedalProgression.MIN_LEVEL, MedalProgression.MAX_LEVEL)
+	return {"loadout":source.loadout,"level":level,"ai_profile":str(source.get("ai_profile", MedalProgression.ai_profile_for_level(level)))}
+
+func _make_unit(id: int, label: String, team: int, cell: Vector2i, leader: bool, color: Color, loadout: Dictionary, ai_profile: String = AiProfile.GENERAL, level: int = 1) -> Dictionary:
+	var normalized_level := clampi(level, MedalProgression.MIN_LEVEL, MedalProgression.MAX_LEVEL)
 	var unit := {
 		"id": id, "name": label, "team": team, "cell": cell,
 		"propulsion": 0, "leader": leader, "color": color, "ai_profile": ai_profile,
+		"level": normalized_level, "success_bonus": MedalProgression.success_bonus(normalized_level),
+		"medaforces": MedalProgression.unlocked_medaforces(normalized_level),
 		"ap": 0, "max_ap": 0, "mf": 0, "acted": false,
 		"equipment": {}, "parts": {}, "parts_max": {},
 	}
@@ -146,9 +159,9 @@ func defense_value(unit: Dictionary) -> int:
 	return int(equipped_part(unit, "legs").defense_base * ratio)
 
 # 攻撃側の成功値と対象の回避値から命中率(%)を求める。
-func hit_chance(attacker: Dictionary, target: Dictionary, action: String) -> int:
-	var success: int = action_data(action, attacker).success + int(attacker.propulsion / 4)
-	return clampi(60 + (success - evasion_value(target)) * 5, 10, 95)
+func hit_chance(attacker: Dictionary, target: Dictionary, action: String) -> float:
+	var success: float = float(action_data(action, attacker).success + int(attacker.propulsion / 4)) + float(attacker.get("success_bonus", 0.0))
+	return clampf(60.0 + (success - evasion_value(target)) * 5.0, 10.0, 95.0)
 
 # 戦闘状態から決定論的に得る擬似乱数。テスト再現性のため乱数生成器を使わない。
 func _battle_roll(seed_value: int, salt: int, modulo: int) -> int:

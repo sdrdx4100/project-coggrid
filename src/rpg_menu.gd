@@ -52,7 +52,7 @@ func _ready() -> void:
 func open_for(data: GameData) -> void:
 	game_data = data
 	member_options.clear()
-	for member in game_data.roster: member_options.add_item(("LEADER  " if member.leader else "MEMBER  ") + member.name)
+	for member in game_data.roster: member_options.add_item(("LEADER  " if member.leader else "MEMBER  ") + member.name + "  Lv.%d" % game_data.member_level(member))
 	member_index = clampi(member_index, 0, game_data.roster.size() - 1)
 	member_options.select(member_index)
 	notice.text = ""
@@ -87,4 +87,10 @@ func _on_part_selected(index: int, slot: String, options: OptionButton) -> void:
 func _update_detail() -> void:
 	var member := game_data.roster[member_index]
 	var legs := game_data.catalog.get_part(member.loadout.legs)
-	detail.text = "機体: %s　推進 %d　基礎回避 %d　防御 %d\n所持パーツは機体間で共有され、所持数を超えて装着できません。" % [member.name, legs.propulsion, legs.evasion_base, legs.defense_base]
+	var level := game_data.member_level(member)
+	var experience := int(member.get("experience", 0))
+	var next_experience := MedalProgression.experience_for_level(mini(level + 1, MedalProgression.MAX_LEVEL))
+	var ai_label := "強敵" if MedalProgression.ai_profile_for_level(level) == AiProfile.ELITE else "一般"
+	var mf_names := PackedStringArray()
+	for medaforce in MedalProgression.unlocked_medaforces(level): mf_names.append(medaforce.name)
+	detail.text = "機体: %s　Lv.%d　EXP %d/%d　成功補正 +%.1f\n推進 %d　基礎回避 %d　防御 %d　AUTO %s\nMF: %s" % [member.name, level, experience, next_experience, MedalProgression.success_bonus(level), legs.propulsion, legs.evasion_base, legs.defense_base, ai_label, " / ".join(mf_names)]

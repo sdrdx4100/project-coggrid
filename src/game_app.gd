@@ -50,4 +50,5 @@ func show_battle() -> void:
 
 func _on_battle_completed(result: String) -> void:
 	if result == "win": game_data.battles_won += 1
+	game_data.grant_battle_experience(result)
 	show_field()

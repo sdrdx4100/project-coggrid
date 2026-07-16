@@ -29,7 +29,7 @@ func _ready() -> void:
 	battle.changed.connect(_refresh)
 	battle.log_added.connect(_on_log)
 	battle.battle_finished.connect(_on_battle_finished)
-	battle.setup_demo(game_data.player_loadouts() if game_data != null else [])
+	battle.setup_demo(game_data.player_battle_members() if game_data != null else [])
 	_show_battle_intro()
 
 func _build_ui() -> void:
@@ -172,7 +172,7 @@ func _refresh() -> void:
 	turn_label.text = " TURN %02d " % battle.round_number
 	phase_label.text = _phase_text()
 	if unit.is_empty(): return
-	unit_name.text = ("LEADER  " if unit.leader else "MEMBER  ") + unit.name
+	unit_name.text = ("LEADER  " if unit.leader else "MEMBER  ") + unit.name + "  Lv.%d" % unit.level
 	ap_label.text = "AP  %02d / %02d pt" % [unit.ap, unit.max_ap]
 	mf_label.text = "MF  %03d pt" % unit.mf
 	portrait.show_unit(unit)
@@ -242,7 +242,7 @@ func _on_battle_finished(text: String) -> void:
 	pending_result = "win" if battle.winner == 0 else "loss"
 	result_title.text = "YOU WIN" if pending_result == "win" else "YOU LOSE"
 	result_title.add_theme_color_override("font_color", Color("8fffc1") if pending_result == "win" else Color("ff8390"))
-	result_detail.text = "%s\nTURN %d　勝利条件：リーダー頭部の破壊" % [text, battle.round_number]
+	result_detail.text = "%s\nTURN %d　勝利条件：リーダー頭部の破壊\nEXP +%d" % [text, battle.round_number, MedalProgression.battle_experience(pending_result)]
 	result_panel.show()
 	result_panel.move_to_front()
 	_on_log(text)

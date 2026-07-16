@@ -20,6 +20,7 @@ var phase := "idle" # choose, move, target, finished
 var winner := -1
 var last_attack: Dictionary = {}
 var catalog := PartCatalog.new()
+var ai_controller := BattleAi.new()
 var team_inventory := {
 	0: {"cog_sensor": 2, "fortress_core": 2, "bolt_rifle": 2, "prism_cannon": 2, "blast_launcher": 2, "impact_knuckle": 2, "needle_claw": 2, "walker_legs": 2, "hover_base": 2},
 	1: {"rivet_core": 2, "red_rifle": 2, "red_claw": 2, "rivet_legs": 2},
@@ -29,17 +30,17 @@ func setup_demo(player_loadouts: Array[Dictionary] = []) -> void:
 	var blue_a := player_loadouts[0] if player_loadouts.size() > 0 else {"head":"cog_sensor","right":"bolt_rifle","left":"impact_knuckle","legs":"walker_legs"}
 	var blue_b := player_loadouts[1] if player_loadouts.size() > 1 else {"head":"fortress_core","right":"prism_cannon","left":"needle_claw","legs":"walker_legs"}
 	units = [
-		_make_unit(0, "COG-01", 0, Vector2i(2, 6), true, Color("45a7ff"), blue_a),
-		_make_unit(1, "BOLT-02", 0, Vector2i(1, 4), false, Color("2d72cc"), blue_b),
-		_make_unit(2, "RIVET-R", 1, Vector2i(6, 2), true, Color("ff5b5b"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}),
-		_make_unit(3, "CLAW-R", 1, Vector2i(7, 4), false, Color("cc3434"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}),
+		_make_unit(0, "COG-01", 0, Vector2i(2, 6), true, Color("45a7ff"), blue_a, "player"),
+		_make_unit(1, "BOLT-02", 0, Vector2i(1, 4), false, Color("2d72cc"), blue_b, "player"),
+		_make_unit(2, "RIVET-R", 1, Vector2i(6, 2), true, Color("ff5b5b"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.BOSS),
+		_make_unit(3, "CLAW-R", 1, Vector2i(7, 4), false, Color("cc3434"), {"head":"rivet_core","right":"red_rifle","left":"red_claw","legs":"rivet_legs"}, AiProfile.ELITE),
 	]
 	_start_round()
 
-func _make_unit(id: int, label: String, team: int, cell: Vector2i, leader: bool, color: Color, loadout: Dictionary) -> Dictionary:
+func _make_unit(id: int, label: String, team: int, cell: Vector2i, leader: bool, color: Color, loadout: Dictionary, ai_profile: String = AiProfile.GENERAL) -> Dictionary:
 	var unit := {
 		"id": id, "name": label, "team": team, "cell": cell,
-		"propulsion": 0, "leader": leader, "color": color,
+		"propulsion": 0, "leader": leader, "color": color, "ai_profile": ai_profile,
 		"ap": 0, "max_ap": 0, "mf": 0, "acted": false,
 		"equipment": {}, "parts": {}, "parts_max": {},
 	}
@@ -261,25 +262,12 @@ func finish_action() -> void:
 func auto_act() -> void:
 	var actor := current_unit()
 	if actor.is_empty(): return
-	var enemies: Array[Dictionary] = []
-	for unit in units:
-		if is_active(unit) and unit.team != actor.team: enemies.append(unit)
-	if enemies.is_empty(): return
-	enemies.sort_custom(func(a: Dictionary, b: Dictionary): return _distance(actor.cell, a.cell) < _distance(actor.cell, b.cell))
-	var target := enemies[0]
-	var right_action := action_data("right", actor)
-	var action := "right" if actor.ap >= right_action.cost and actor.parts.right > 0 else "move"
-	choose_action(action)
-	var desired: Vector2i = actor.cell
-	var best_distance := _distance(actor.cell, target.cell)
-	for cell in reachable_cells():
-		var distance := _distance(cell, target.cell)
-		if distance < best_distance:
-			best_distance = distance
-			desired = cell
-	move_current(desired)
+	var decision := ai_controller.choose_action(self, actor)
+	if decision.is_empty(): finish_action(); return
+	choose_action(decision.action)
+	move_current(decision.cell)
 	if phase == "target":
-		if target.id in targetable_units(): attack(target.id)
+		if decision.target_id in targetable_units(): attack(decision.target_id)
 		else: finish_action()
 
 func unit_at(cell: Vector2i) -> Dictionary:

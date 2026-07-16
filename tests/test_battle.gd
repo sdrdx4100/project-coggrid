@@ -9,6 +9,7 @@ func _initialize() -> void:
 	_test_evasion()
 	_test_part_catalog_and_equipment()
 	_test_action_taxonomy()
+	_test_ai_profiles()
 	if failures == 0:
 		print("PASS: battle model tests")
 		quit(0)
@@ -105,3 +106,26 @@ func _test_action_taxonomy() -> void:
 	_expect(hammer.action_class == PartAction.CLASS_STRIKE, "hammer belongs to strike class")
 	_expect(sensor.action_class == PartAction.CLASS_SUPPORT and "scan" in sensor.effect_ids, "support actions can declare future effects")
 	_expect(not sensor.is_attack(), "support is distinct from attack classes")
+
+func _test_ai_profiles() -> void:
+	var general := AiProfile.create(AiProfile.GENERAL)
+	var elite := AiProfile.create(AiProfile.ELITE)
+	var boss := AiProfile.create(AiProfile.BOSS)
+	_expect(general.choice_pool == 3, "general AI varies among its top three choices")
+	_expect(elite.choice_pool == 2, "elite AI varies among its top two choices")
+	_expect(boss.choice_pool == 1, "boss AI always takes its highest-scored choice")
+
+	var battle := BattleState.new()
+	battle.setup_demo()
+	_expect(battle.units[2].ai_profile == AiProfile.BOSS, "enemy leader uses the boss profile")
+	_expect(battle.units[3].ai_profile == AiProfile.ELITE, "enemy partner uses the elite profile")
+
+	var actor: Dictionary = battle.units[2]
+	actor.cell = Vector2i(4, 4)
+	battle.units[0].cell = Vector2i(3, 4)
+	battle.units[1].cell = Vector2i(5, 4)
+	var first: Dictionary = BattleAi.new().choose_action(battle, actor)
+	var second: Dictionary = BattleAi.new().choose_action(battle, actor)
+	_expect(not first.is_empty(), "AI produces a legal tactical decision")
+	_expect(first == second, "AI choice is deterministic for the same battle state")
+	_expect(first.target_id == battle.units[0].id, "boss profile prioritizes the enemy leader")

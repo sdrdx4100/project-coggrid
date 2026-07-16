@@ -28,6 +28,7 @@ func _run() -> void:
 	await process_frame
 	_expect(app.current_screen is BattleScreen, "NPC flow can open battle")
 	_expect(app.current_screen.battle.equipped_part(app.current_screen.battle.units[0], "head").id == "cog_sensor", "battle receives field roster")
+	_expect(app.current_screen.battle.should_auto_act(app.current_screen.battle.units[1]), "battle receives ally auto control")
 	# Destroying the enemy leader head stops battle and opens an explicit result.
 	app.current_screen.battle.units[2].parts.head = 0
 	app.current_screen.battle._check_victory()

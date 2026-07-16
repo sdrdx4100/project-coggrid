@@ -172,18 +172,24 @@ func _refresh() -> void:
 	turn_label.text = " TURN %02d " % battle.round_number
 	phase_label.text = _phase_text()
 	if unit.is_empty(): return
-	unit_name.text = ("LEADER  " if unit.leader else "MEMBER  ") + unit.name + "  Lv.%d" % unit.level
+	var control_label := "  AUTO" if battle.should_auto_act(unit) else ""
+	unit_name.text = ("LEADER  " if unit.leader else "MEMBER  ") + unit.name + "  Lv.%d" % unit.level + control_label
 	ap_label.text = "AP  %02d / %02d pt" % [unit.ap, unit.max_ap]
 	mf_label.text = "MF  %03d pt" % unit.mf
 	portrait.show_unit(unit)
 	_rebuild_parts(unit)
 	_rebuild_actions(unit)
-	if unit.team == 1 and battle.phase != "finished" and not input_locked and not ai_pending:
-		ai_pending = true
-		get_tree().create_timer(0.55).timeout.connect(func():
-			ai_pending = false
-			if battle.current_unit().get("team", 0) == 1: battle.auto_act()
-		)
+	if battle.should_auto_act(unit) and battle.phase != "finished" and not input_locked and not ai_pending:
+		_queue_auto_action()
+
+func _queue_auto_action() -> void:
+	ai_pending = true
+	get_tree().create_timer(0.55).timeout.connect(func():
+		if not input_locked and battle.phase != "finished" and battle.should_auto_act(battle.current_unit()):
+			battle.auto_act()
+		ai_pending = false
+		_refresh()
+	)
 
 func _rebuild_parts(unit: Dictionary) -> void:
 	for child in parts_box.get_children(): child.queue_free()
@@ -202,21 +208,22 @@ func _rebuild_actions(unit: Dictionary) -> void:
 		var data := battle.action_data(action, unit)
 		var button := Button.new()
 		button.text = "%s  AP %d" % [data.label, data.cost]
-		button.disabled = input_locked or unit.team == 1 or battle.phase != "choose" or unit.ap < data.cost or (action != "move" and unit.parts[action] <= 0)
+		button.disabled = input_locked or not battle.is_player_controlled(unit) or battle.phase != "choose" or unit.ap < data.cost or (action != "move" and unit.parts[action] <= 0)
 		button.pressed.connect(func(): battle.choose_action(action))
 		action_box.add_child(button)
-	if battle.can_reconfigure(unit.id):
+	if battle.can_reconfigure(unit.id) and battle.is_player_controlled(unit):
 		var setup := Button.new()
 		setup.text = "セッティング"
 		setup.pressed.connect(func(): setup_panel.open_for(battle, unit.id))
 		action_box.add_child(setup)
-	if battle.phase in ["move", "target"] and unit.team == 0:
+	if battle.phase in ["move", "target"] and battle.is_player_controlled(unit):
 		var skip := Button.new()
 		skip.text = "行動終了"
 		skip.pressed.connect(battle.finish_action)
 		action_box.add_child(skip)
 
 func _phase_text() -> String:
+	if battle.should_auto_act(battle.current_unit()) and battle.phase != "finished": return "AUTO行動中"
 	match battle.phase:
 		"choose": return "使用パーツを選択"
 		"move": return "残りAPで移動先を選択"
@@ -226,7 +233,7 @@ func _phase_text() -> String:
 
 func _on_cell_clicked(cell: Vector2i) -> void:
 	var unit := battle.current_unit()
-	if input_locked or unit.is_empty() or unit.team == 1: return
+	if input_locked or not battle.is_player_controlled(unit): return
 	if battle.phase == "move":
 		battle.move_current(cell)
 	elif battle.phase == "target":
